@@ -18,11 +18,11 @@ var commonSharedFiles = []string{
 }
 
 func isPrompted(repo string) bool {
-	return git.GetConfig(repo, git.KeyCwsharePrompted) == "true"
+	return git.GetConfig(repo, git.KeyWtsharePrompted) == "true"
 }
 
 func markPrompted(repo string) {
-	_ = git.SetConfig(repo, git.KeyCwsharePrompted, "true")
+	_ = git.SetConfig(repo, git.KeyWtsharePrompted, "true")
 }
 
 // DetectCommonFiles returns common share-worthy files present in the repo.
@@ -36,10 +36,10 @@ func DetectCommonFiles(repo string) []string {
 	return out
 }
 
-// CreateTemplate writes a .cwshare template with detected files commented out.
+// CreateTemplate writes a .wtshare template with detected files commented out.
 func CreateTemplate(repo string, suggested []string) error {
 	var b strings.Builder
-	b.WriteString(`# .cwshare - Files to copy to new worktrees
+	b.WriteString(`# .wtshare - Files to copy to new worktrees
 #
 # Files listed here will be automatically copied when you run 'wt new'.
 # Useful for environment files and local configs not tracked in git.
@@ -60,7 +60,7 @@ func CreateTemplate(repo string, suggested []string) error {
 	return os.WriteFile(filepath.Join(repo, FileName), []byte(b.String()), 0o644)
 }
 
-// PromptSetup asks (once per repo) whether to create a .cwshare file.
+// PromptSetup asks (once per repo) whether to create a .wtshare file.
 func PromptSetup() {
 	repo, err := git.RepoRoot("")
 	if err != nil {
@@ -80,9 +80,9 @@ func PromptSetup() {
 	}
 	detected := DetectCommonFiles(repo)
 	fmt.Println()
-	fmt.Println(termenv.Bold(termenv.Cyan("💡 .cwshare File Setup")))
+	fmt.Println(termenv.Bold(termenv.Cyan("💡 .wtshare File Setup")))
 	fmt.Println()
-	fmt.Printf("Would you like to create a %s file?\n", termenv.Cyan(".cwshare"))
+	fmt.Printf("Would you like to create a %s file?\n", termenv.Cyan(".wtshare"))
 	fmt.Println("This lets you automatically copy files to new worktrees (like .env, configs).")
 	fmt.Println()
 	if len(detected) > 0 {
@@ -92,19 +92,19 @@ func PromptSetup() {
 		}
 		fmt.Println()
 	}
-	ok := termenv.Confirm("Create .cwshare file?", true)
+	ok := termenv.Confirm("Create .wtshare file?", true)
 	markPrompted(repo)
 	if ok {
 		if err := CreateTemplate(repo, detected); err == nil {
 			termenv.Success("Created %s", filepath.Join(repo, FileName))
 			fmt.Println()
 			fmt.Println(termenv.Bold("Next steps:"))
-			fmt.Println("  1. Review and edit .cwshare to uncomment files you want to share")
-			fmt.Printf("  2. Add to git: %s\n", termenv.Cyan("git add .cwshare && git commit"))
+			fmt.Println("  1. Review and edit .wtshare to uncomment files you want to share")
+			fmt.Printf("  2. Add to git: %s\n", termenv.Cyan("git add .wtshare && git commit"))
 			fmt.Printf("  3. Files will be copied when you run: %s\n\n", termenv.Cyan("wt new <branch>"))
 		}
 	} else {
-		fmt.Println(termenv.Dim("\nYou can create .cwshare manually anytime."))
+		fmt.Println(termenv.Dim("\nYou can create .wtshare manually anytime."))
 		fmt.Println()
 	}
 }

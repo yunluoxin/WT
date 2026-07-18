@@ -1,4 +1,4 @@
-// Package share implements .cwshare file support: copying listed files
+// Package share implements .wtshare file support: copying listed files
 // into new worktrees.
 package share
 
@@ -13,9 +13,9 @@ import (
 )
 
 // FileName is the share-list file at the repo root.
-const FileName = ".cwshare"
+const FileName = ".wtshare"
 
-// Entries parses the .cwshare file: one relative path per line,
+// Entries parses the .wtshare file: one relative path per line,
 // '#' comments and blank lines ignored.
 func Entries(repo string) []string {
 	f, err := os.Open(filepath.Join(repo, FileName))
@@ -35,7 +35,7 @@ func Entries(repo string) []string {
 	return out
 }
 
-// HasFile reports whether the repo has a .cwshare file.
+// HasFile reports whether the repo has a .wtshare file.
 func HasFile(repo string) bool {
 	_, err := os.Stat(filepath.Join(repo, FileName))
 	return err == nil

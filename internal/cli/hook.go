@@ -25,7 +25,7 @@ func hookEventCompletion(cmd *cobra.Command, args []string, toComplete string) (
 func hookCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "hook",
-		Short: "Manage per-repository lifecycle hooks (.cwconfig.json)",
+		Short: "Manage per-repository lifecycle hooks (.wtconfig.json)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()

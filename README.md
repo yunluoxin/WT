@@ -38,7 +38,7 @@ wt merge               # rebase + fast-forward merge into base + cleanup
 | Inspection | `doctor`, `diff`, `tree`, `stats` |
 | Stash | `stash save`, `stash list`, `stash apply` |
 | Backup | `backup create`, `backup list`, `backup restore` |
-| Hooks | `hook add/remove/list/enable/disable/run` (12 lifecycle events, `.cwconfig.json`) |
+| Hooks | `hook add/remove/list/enable/disable/run` (12 lifecycle events, `.wtconfig.json`) |
 | Config | `config show/set/use-preset/list-presets/reset`, `export`, `import` |
 | Shell integration | `shell-setup`, `completion <shell>`, `wt-cd` (via `_shell-function`) |
 
@@ -61,8 +61,8 @@ wt merge               # rebase + fast-forward merge into base + cleanup
 - Sessions: `~/.config/wt/sessions/<branch>/`
 - Backups: `~/.config/wt/backups/`
 - Registry (global mode): `~/.config/wt/registry.json`
-- Per-repo hooks: `<repo>/.cwconfig.json`
-- Shared files to copy into new worktrees: `<repo>/.cwshare`
+- Per-repo hooks: `<repo>/.wtconfig.json`
+- Shared files to copy into new worktrees: `<repo>/.wtshare`
 - Env overrides: `WT_AI_TOOL`, `WT_LAUNCH_METHOD`, `WT_NON_INTERACTIVE`
 
 ### Shell integration (wt-cd)

@@ -1,5 +1,5 @@
 // Package hooks manages per-repository lifecycle hooks stored in
-// .cwconfig.json at the repository root.
+// .wtconfig.json at the repository root.
 package hooks
 
 import (
@@ -13,7 +13,7 @@ import (
 )
 
 // LocalConfigFile is the per-repo hooks config file name.
-const LocalConfigFile = ".cwconfig.json"
+const LocalConfigFile = ".wtconfig.json"
 
 // Events lists all supported hook events.
 var Events = []string{
@@ -33,7 +33,7 @@ type Hook struct {
 	Description string `json:"description,omitempty"`
 }
 
-// fileSchema mirrors the on-disk .cwconfig.json structure.
+// fileSchema mirrors the on-disk .wtconfig.json structure.
 type fileSchema struct {
 	Hooks map[string][]Hook `json:"hooks"`
 }

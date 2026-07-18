@@ -10,7 +10,7 @@ const (
 	KeyWorktreeBase    = "branch.%s.worktreeBase"
 	KeyBasePath        = "worktree.%s.basePath"
 	KeyIntendedBranch  = "worktree.%s.intendedBranch"
-	KeyCwsharePrompted = "cwshare.prompted"
+	KeyWtsharePrompted = "wtshare.prompted"
 )
 
 // GetConfig reads a local git config value; returns "" when unset.
