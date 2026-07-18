@@ -157,6 +157,13 @@ func CreatePR(opts PROptions) error {
 	}
 	repo := basePath
 
+	// Safety: a PR from a branch into itself is meaningless (e.g. running
+	// `wt pr` inside the main working tree on the base branch).
+	if feature == baseBranch {
+		return wterrors.New(wterrors.ErrProtectedWorktree,
+			"cannot create a PR from branch '%s' into itself.\nHint: 'wt pr' is meant to be run inside a feature worktree created with 'wt new'.", feature)
+	}
+
 	termenv.Info("\n%s", termenv.Bold(termenv.Cyan("Creating Pull Request:")))
 	termenv.Info("  Feature:     %s", termenv.Green(feature))
 	termenv.Info("  Base:        %s", termenv.Green(baseBranch))

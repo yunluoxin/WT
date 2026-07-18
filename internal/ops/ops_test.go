@@ -134,6 +134,23 @@ func TestDeleteMainRepoRefused(t *testing.T) {
 	}
 }
 
+func TestFinishOnBaseBranchRefused(t *testing.T) {
+	testutil.SetHome(t)
+	repo := testutil.NewRepo(t)
+	testutil.Chdir(t, repo)
+	// Running merge inside the main worktree on the base branch must be
+	// refused before any rebase/merge/cleanup is attempted.
+	if err := FinishWorktree(FinishOptions{}); err == nil {
+		t.Error("expected refusal to merge the base branch into itself")
+	}
+	if _, err := os.Stat(repo); err != nil {
+		t.Error("main repository worktree was affected")
+	}
+	if !git.BranchExists(repo, "main") {
+		t.Error("base branch was deleted")
+	}
+}
+
 func TestFinishWorktreeMergesAndCleansUp(t *testing.T) {
 	testutil.SetHome(t)
 	repo := testutil.NewRepo(t)
@@ -163,8 +180,7 @@ func TestFinishWorktreeMergesAndCleansUp(t *testing.T) {
 	}
 }
 
-func TestFinishDryRun(t *testing.T) {
-	testutil.SetHome(t)
+func TestFinishDryRun(t *testing.T) {	testutil.SetHome(t)
 	repo := testutil.NewRepo(t)
 	testutil.Chdir(t, repo)
 	wtPath, err := CreateWorktree(CreateOptions{BranchName: "feat-dry", NoTerm: true})

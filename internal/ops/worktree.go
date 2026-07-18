@@ -214,6 +214,17 @@ func FinishWorktree(opts FinishOptions) error {
 	}
 	repo := basePath
 
+	// Safety: merging a branch into itself is meaningless, and the cleanup
+	// step would try to remove the main worktree and delete the base branch
+	// (e.g. running `wt merge` inside the main working tree on 'main').
+	if feature == baseBranch {
+		return wterrors.New(wterrors.ErrProtectedWorktree,
+			"cannot merge branch '%s' into itself.\nHint: 'wt merge' is meant to be run inside a feature worktree created with 'wt new'.", feature)
+	}
+	if samePath(cwd, basePath) {
+		return wterrors.New(wterrors.ErrProtectedWorktree, "cannot merge the main repository worktree")
+	}
+
 	termenv.Info("\n%s", termenv.Bold(termenv.Cyan("Finishing worktree:")))
 	termenv.Info("  Feature:     %s", termenv.Green(feature))
 	termenv.Info("  Base:        %s", termenv.Green(baseBranch))
