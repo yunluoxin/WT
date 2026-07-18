@@ -8,6 +8,20 @@ import (
 	"strings"
 )
 
+// BranchPrefix marks branches created by `wt new`. It makes wt-managed
+// worktrees recognizable at a glance and lets destructive commands
+// (merge, pr) refuse foreign branches unless --any is given.
+const BranchPrefix = "wt-"
+
+// PrefixBranch returns the branch name `wt new` creates for a user-supplied
+// name. Already-prefixed names are returned unchanged (idempotent).
+func PrefixBranch(name string) string {
+	if strings.HasPrefix(name, BranchPrefix) {
+		return name
+	}
+	return BranchPrefix + name
+}
+
 // SanitizeBranchName converts a branch name into a filesystem-safe
 // directory suffix. Ported character-for-character from the Python
 // sanitize_branch_name.

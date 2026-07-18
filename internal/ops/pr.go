@@ -134,6 +134,7 @@ type PROptions struct {
 	Title      string
 	Body       string
 	Draft      bool
+	Any        bool // allow branches not created by `wt new` (no wt- prefix)
 	LookupMode LookupMode
 	Global     bool
 }
@@ -162,6 +163,13 @@ func CreatePR(opts PROptions) error {
 	if feature == baseBranch {
 		return wterrors.New(wterrors.ErrProtectedWorktree,
 			"cannot create a PR from branch '%s' into itself.\nHint: 'wt pr' is meant to be run inside a feature worktree created with 'wt new'.", feature)
+	}
+	// By default only PR branches created by `wt new` (wt- prefix);
+	// --any opts out for foreign branches/worktrees.
+	if !opts.Any && !strings.HasPrefix(feature, BranchPrefix) {
+		return wterrors.New(wterrors.ErrProtectedWorktree,
+			"branch '%s' was not created by wt (missing '%s' prefix).\nHint: use 'wt pr --any' to proceed anyway, or create worktrees with 'wt new'.",
+			feature, BranchPrefix)
 	}
 
 	termenv.Info("\n%s", termenv.Bold(termenv.Cyan("Creating Pull Request:")))

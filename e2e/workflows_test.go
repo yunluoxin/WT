@@ -81,7 +81,7 @@ func TestFullLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v\n%s", err, out)
 	}
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-feat-x")
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-feat-x")
 	if _, err := os.Stat(wtPath); err != nil {
 		t.Fatalf("worktree not created: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestRebaseConflictAbort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v\n%s", err, out)
 	}
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-conflict-branch")
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-conflict-branch")
 
 	// Diverge: same file changed on both branches.
 	testutil.WriteFile(t, wtPath, "a.txt", "feature version\n")
@@ -235,11 +235,11 @@ func TestPathCommand(t *testing.T) {
 	if _, _, err := run(t, repo, "new", "path-test", "--no-term"); err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	out, _, err := run(t, repo, "_path", "path-test")
+	out, _, err := run(t, repo, "_path", "wt-path-test")
 	if err != nil {
 		t.Fatalf("_path: %v", err)
 	}
-	want := filepath.Join(filepath.Dir(repo), "myrepo-path-test")
+	want := filepath.Join(filepath.Dir(repo), "myrepo-wt-path-test")
 	got := strings.TrimSpace(out)
 	// Resolve symlinks for macOS /tmp.
 	gotR, _ := filepath.EvalSymlinks(got)

@@ -104,7 +104,7 @@ func deleteCmd() *cobra.Command {
 }
 
 func mergeCmd() *cobra.Command {
-	var push, interactive, dryRun bool
+	var push, interactive, dryRun, any bool
 	var tf targetFlags
 	cmd := &cobra.Command{
 		Use:   "merge [target]",
@@ -119,6 +119,7 @@ func mergeCmd() *cobra.Command {
 				Push:        push,
 				Interactive: interactive,
 				DryRun:      dryRun,
+				Any:         any,
 				LookupMode:  tf.mode(),
 				Global:      globalMode,
 			})
@@ -127,6 +128,7 @@ func mergeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&push, "push", false, "Push base branch to origin after merge")
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Confirm each step")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview operations without executing")
+	cmd.Flags().BoolVar(&any, "any", false, "Allow branches not created by 'wt new' (no wt- prefix)")
 	tf.add(cmd)
 	return cmd
 }
@@ -145,7 +147,7 @@ func finishCmd() *cobra.Command {
 }
 
 func prCmd() *cobra.Command {
-	var noPush, draft bool
+	var noPush, draft, any bool
 	var title, body string
 	var tf targetFlags
 	cmd := &cobra.Command{
@@ -162,6 +164,7 @@ func prCmd() *cobra.Command {
 				Title:      title,
 				Body:       body,
 				Draft:      draft,
+				Any:        any,
 				LookupMode: tf.mode(),
 				Global:     globalMode,
 			})
@@ -171,6 +174,7 @@ func prCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&title, "title", "t", "", "PR title (skips AI generation)")
 	cmd.Flags().StringVar(&body, "body", "", "PR body")
 	cmd.Flags().BoolVar(&draft, "draft", false, "Create as draft PR")
+	cmd.Flags().BoolVar(&any, "any", false, "Allow branches not created by 'wt new' (no wt- prefix)")
 	tf.add(cmd)
 	return cmd
 }

@@ -39,7 +39,9 @@ func CreateWorktree(opts CreateOptions) (string, error) {
 			"invalid branch name: %s\nHint: Use alphanumeric characters, hyphens, and slashes. Avoid special characters like emojis, backslashes, or control characters.", msg)
 	}
 
-	branch := opts.BranchName
+	// Branches created by wt carry a prefix so they are recognizable and
+	// destructive commands (merge, pr) can refuse foreign branches.
+	branch := PrefixBranch(opts.BranchName)
 
 	// Existing worktree for this branch?
 	existing, found, err := git.FindWorktreeByBranch(repo, branch)
@@ -195,6 +197,7 @@ type FinishOptions struct {
 	Interactive bool
 	DryRun      bool
 	AIMerge     bool
+	Any         bool // allow branches not created by `wt new` (no wt- prefix)
 	LookupMode  LookupMode
 	Global      bool
 }
@@ -223,6 +226,13 @@ func FinishWorktree(opts FinishOptions) error {
 	}
 	if samePath(cwd, basePath) {
 		return wterrors.New(wterrors.ErrProtectedWorktree, "cannot merge the main repository worktree")
+	}
+	// By default only merge branches created by `wt new` (wt- prefix);
+	// --any opts out for foreign branches/worktrees.
+	if !opts.Any && !strings.HasPrefix(feature, BranchPrefix) {
+		return wterrors.New(wterrors.ErrProtectedWorktree,
+			"branch '%s' was not created by wt (missing '%s' prefix).\nHint: use 'wt merge --any' to merge it anyway, or create worktrees with 'wt new'.",
+			feature, BranchPrefix)
 	}
 
 	termenv.Info("\n%s", termenv.Bold(termenv.Cyan("Finishing worktree:")))

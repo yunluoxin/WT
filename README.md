@@ -21,12 +21,17 @@ cd go && go build -o wt ./cmd/wt
 ## Quick start
 
 ```bash
-wt new fix-auth        # create worktree ../<repo>-fix-auth + launch AI tool
+wt new fix-auth        # create branch wt-fix-auth + worktree ../<repo>-wt-fix-auth, launch AI tool
 wt list                # list worktrees
-wt resume fix-auth     # resume AI session in a worktree
+wt resume wt-fix-auth  # resume AI session in a worktree
 wt pr                  # rebase, push, create GitHub PR (requires gh)
 wt merge               # rebase + fast-forward merge into base + cleanup
 ```
+
+Branches created by `wt new` carry a `wt-` prefix so wt-managed worktrees
+are recognizable at a glance. `wt merge` and `wt pr` refuse branches
+without the prefix (e.g. worktrees created by plain `git worktree add`)
+unless you pass `--any`.
 
 ## Commands
 

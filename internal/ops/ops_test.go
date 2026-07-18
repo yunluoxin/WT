@@ -38,6 +38,48 @@ func TestDefaultWorktreePath(t *testing.T) {
 	}
 }
 
+func TestPrefixBranch(t *testing.T) {
+	if got := PrefixBranch("fix-auth"); got != "wt-fix-auth" {
+		t.Errorf("PrefixBranch = %q, want wt-fix-auth", got)
+	}
+	// Idempotent for already-prefixed names.
+	if got := PrefixBranch("wt-fix-auth"); got != "wt-fix-auth" {
+		t.Errorf("PrefixBranch = %q, want wt-fix-auth (unchanged)", got)
+	}
+}
+
+func TestCreatePrefixesBranchAndPath(t *testing.T) {
+	testutil.SetHome(t)
+	repo := testutil.NewRepo(t)
+	testutil.Chdir(t, repo)
+
+	path, err := CreateWorktree(CreateOptions{BranchName: "feat-pre", NoTerm: true})
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+	if !git.BranchExists(repo, "wt-feat-pre") {
+		t.Error("branch was not created with wt- prefix")
+	}
+	if git.BranchExists(repo, "feat-pre") {
+		t.Error("unprefixed branch should not exist")
+	}
+	wantDir := "myrepo-" + BranchPrefix + "feat-pre"
+	if base := filepath.Base(path); base != wantDir {
+		t.Errorf("worktree dir = %q, want %q", base, wantDir)
+	}
+
+	// Already-prefixed input is not double-prefixed.
+	if _, err := CreateWorktree(CreateOptions{BranchName: "wt-explicit", NoTerm: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !git.BranchExists(repo, "wt-explicit") {
+		t.Error("explicit wt- branch missing")
+	}
+	if git.BranchExists(repo, "wt-wt-explicit") {
+		t.Error("branch name was double-prefixed")
+	}
+}
+
 func TestCreateAndResolveWorktree(t *testing.T) {
 	testutil.SetHome(t)
 	repo := testutil.NewRepo(t)
@@ -50,20 +92,20 @@ func TestCreateAndResolveWorktree(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("worktree not created: %v", err)
 	}
-	// Metadata stored.
-	if got := git.GetConfig(repo, git.MetadataKey(git.KeyWorktreeBase, "feat-1")); got != "main" {
+	// Metadata stored under the prefixed branch name.
+	if got := git.GetConfig(repo, git.MetadataKey(git.KeyWorktreeBase, "wt-feat-1")); got != "main" {
 		t.Errorf("worktreeBase = %q, want main", got)
 	}
-	if got := git.GetConfig(repo, git.MetadataKey(git.KeyIntendedBranch, "feat-1")); got != "feat-1" {
+	if got := git.GetConfig(repo, git.MetadataKey(git.KeyIntendedBranch, "wt-feat-1")); got != "wt-feat-1" {
 		t.Errorf("intendedBranch = %q", got)
 	}
 
 	// Resolve by branch.
-	target, err := ResolveWorktreeTarget("feat-1", LookupAuto, false)
+	target, err := ResolveWorktreeTarget("wt-feat-1", LookupAuto, false)
 	if err != nil {
 		t.Fatalf("ResolveWorktreeTarget: %v", err)
 	}
-	if target.Branch != "feat-1" {
+	if target.Branch != "wt-feat-1" {
 		t.Errorf("branch = %q", target.Branch)
 	}
 
@@ -72,7 +114,7 @@ func TestCreateAndResolveWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveWorktreeTarget by name: %v", err)
 	}
-	if target.Branch != "feat-1" {
+	if target.Branch != "wt-feat-1" {
 		t.Errorf("branch = %q", target.Branch)
 	}
 
@@ -99,13 +141,13 @@ func TestDeleteWorktree(t *testing.T) {
 	if _, err := CreateWorktree(CreateOptions{BranchName: "to-delete", NoTerm: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := DeleteWorktree(DeleteOptions{Target: "to-delete"}); err != nil {
+	if err := DeleteWorktree(DeleteOptions{Target: "wt-to-delete"}); err != nil {
 		t.Fatalf("DeleteWorktree: %v", err)
 	}
-	if git.BranchExists(repo, "to-delete") {
+	if git.BranchExists(repo, "wt-to-delete") {
 		t.Error("branch still exists after delete")
 	}
-	if got := git.GetConfig(repo, git.MetadataKey(git.KeyWorktreeBase, "to-delete")); got != "" {
+	if got := git.GetConfig(repo, git.MetadataKey(git.KeyWorktreeBase, "wt-to-delete")); got != "" {
 		t.Error("metadata not cleaned up")
 	}
 }
@@ -117,10 +159,10 @@ func TestDeleteKeepBranch(t *testing.T) {
 	if _, err := CreateWorktree(CreateOptions{BranchName: "keepme", NoTerm: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := DeleteWorktree(DeleteOptions{Target: "keepme", KeepBranch: true}); err != nil {
+	if err := DeleteWorktree(DeleteOptions{Target: "wt-keepme", KeepBranch: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !git.BranchExists(repo, "keepme") {
+	if !git.BranchExists(repo, "wt-keepme") {
 		t.Error("branch deleted despite --keep-branch")
 	}
 }
@@ -151,6 +193,39 @@ func TestFinishOnBaseBranchRefused(t *testing.T) {
 	}
 }
 
+func TestFinishForeignBranchRefusedUnlessAny(t *testing.T) {
+	testutil.SetHome(t)
+	repo := testutil.NewRepo(t)
+	testutil.Chdir(t, repo)
+
+	// A worktree created outside wt (plain git) has no wt- prefix.
+	foreign := filepath.Join(filepath.Dir(repo), "myrepo-foreign")
+	if _, err := git.Git(repo, true, "worktree", "add", "-b", "foreign", foreign, "main"); err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteFile(t, foreign, "f.txt", "foreign work\n")
+	testutil.Commit(t, foreign, "foreign commit")
+
+	testutil.Chdir(t, foreign)
+	// Default: refused.
+	if err := FinishWorktree(FinishOptions{}); err == nil {
+		t.Error("expected refusal to merge a non-wt branch without --any")
+	}
+	if !git.BranchExists(repo, "foreign") {
+		t.Error("foreign branch was deleted despite refusal")
+	}
+	// --any opts out and merges normally.
+	if err := FinishWorktree(FinishOptions{Any: true}); err != nil {
+		t.Fatalf("FinishWorktree --any: %v", err)
+	}
+	if git.BranchExists(repo, "foreign") {
+		t.Error("foreign branch not deleted after --any merge")
+	}
+	if _, err := os.Stat(filepath.Join(repo, "f.txt")); err != nil {
+		t.Error("foreign commit not merged into main")
+	}
+}
+
 func TestFinishWorktreeMergesAndCleansUp(t *testing.T) {
 	testutil.SetHome(t)
 	repo := testutil.NewRepo(t)
@@ -172,7 +247,7 @@ func TestFinishWorktreeMergesAndCleansUp(t *testing.T) {
 	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
 		t.Error("worktree not removed")
 	}
-	if git.BranchExists(repo, "feat-merge") {
+	if git.BranchExists(repo, "wt-feat-merge") {
 		t.Error("feature branch not deleted")
 	}
 	if _, err := os.Stat(filepath.Join(repo, "feature.txt")); err != nil {
@@ -194,7 +269,7 @@ func TestFinishDryRun(t *testing.T) {	testutil.SetHome(t)
 	if _, err := os.Stat(wtPath); err != nil {
 		t.Error("dry run removed the worktree")
 	}
-	if !git.BranchExists(repo, "feat-dry") {
+	if !git.BranchExists(repo, "wt-feat-dry") {
 		t.Error("dry run deleted the branch")
 	}
 }
@@ -225,10 +300,10 @@ func TestChangeBase(t *testing.T) {
 	if err := ChangeBase(ChangeBaseOptions{NewBase: "develop"}); err != nil {
 		t.Fatalf("ChangeBase: %v", err)
 	}
-	if got := git.GetConfig(repo, git.MetadataKey(git.KeyWorktreeBase, "feat-cb")); got != "develop" {
+	if got := git.GetConfig(repo, git.MetadataKey(git.KeyWorktreeBase, "wt-feat-cb")); got != "develop" {
 		t.Errorf("base metadata = %q, want develop", got)
 	}
-	// feat-cb should now contain develop's commit.
+	// wt-feat-cb should now contain develop's commit.
 	out := testutil.GitOut(t, wtPath, "log", "--oneline")
 	if !contains(out, "develop commit") {
 		t.Errorf("rebase onto develop failed, log:\n%s", out)
@@ -260,7 +335,7 @@ func TestStashSaveListApply(t *testing.T) {
 	if err := StashList(); err != nil {
 		t.Fatalf("StashList: %v", err)
 	}
-	if err := StashApply("stash-src", "stash@{0}"); err != nil {
+	if err := StashApply("wt-stash-src", "stash@{0}"); err != nil {
 		t.Fatalf("StashApply: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(wtPath, "wip.txt")); err != nil {
@@ -282,19 +357,19 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 
 	backupDir := t.TempDir()
 	testutil.Chdir(t, repo)
-	if err := BackupCreate("feat-backup", backupDir, false, false); err != nil {
+	if err := BackupCreate("wt-feat-backup", backupDir, false, false); err != nil {
 		t.Fatalf("BackupCreate: %v", err)
 	}
 	SetBackupsDirOverride(backupDir)
 	t.Cleanup(func() { SetBackupsDirOverride("") })
 
 	// Delete the worktree, then restore from backup.
-	if err := DeleteWorktree(DeleteOptions{Target: "feat-backup"}); err != nil {
+	if err := DeleteWorktree(DeleteOptions{Target: "wt-feat-backup"}); err != nil {
 		t.Fatal(err)
 	}
 	restoreDir := t.TempDir()
 	os.Remove(restoreDir) // restore needs a non-existent path
-	if err := BackupRestore("feat-backup", "", restoreDir); err != nil {
+	if err := BackupRestore("wt-feat-backup", "", restoreDir); err != nil {
 		t.Fatalf("BackupRestore: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(restoreDir, "backed.txt")); err != nil {
@@ -366,23 +441,23 @@ func TestTopologicalSort(t *testing.T) {
 	if _, err := CreateWorktree(CreateOptions{BranchName: "a", NoTerm: true}); err != nil {
 		t.Fatal(err)
 	}
-	wtA, _ := ResolveWorktreeTarget("a", LookupAuto, false)
+	wtA, _ := ResolveWorktreeTarget("wt-a", LookupAuto, false)
 	if _, err := git.Git(wtA.WorktreePath, true, "switch", "-c", "intermediate"); err != nil {
 		// create b from a: switch to a in its worktree first
 		t.Fatal(err)
 	}
-	if _, err := git.Git(wtA.WorktreePath, true, "switch", "a"); err != nil {
+	if _, err := git.Git(wtA.WorktreePath, true, "switch", "wt-a"); err != nil {
 		t.Fatal(err)
 	}
 	testutil.Chdir(t, wtA.WorktreePath)
-	if _, err := CreateWorktree(CreateOptions{BranchName: "b", BaseBranch: "a", NoTerm: true}); err != nil {
+	if _, err := CreateWorktree(CreateOptions{BranchName: "b", BaseBranch: "wt-a", NoTerm: true}); err != nil {
 		t.Fatal(err)
 	}
-	wtB, _ := ResolveWorktreeTarget("b", LookupAuto, false)
+	wtB, _ := ResolveWorktreeTarget("wt-b", LookupAuto, false)
 
-	items := []syncItem{{"b", wtB.WorktreePath}, {"a", wtA.WorktreePath}}
+	items := []syncItem{{"wt-b", wtB.WorktreePath}, {"wt-a", wtA.WorktreePath}}
 	sorted := topologicalSort(items, repo)
-	if sorted[0].branch != "a" || sorted[1].branch != "b" {
+	if sorted[0].branch != "wt-a" || sorted[1].branch != "wt-b" {
 		t.Errorf("topological sort wrong: %v", sorted)
 	}
 }
