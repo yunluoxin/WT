@@ -1,0 +1,6 @@
+/wt
+/wt.exe
+/dist/
+/coverage.out
+/coverage.html
+*.test
