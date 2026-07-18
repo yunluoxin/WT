@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"wt/internal/config"
 	wterrors "wt/internal/errors"
 	"wt/internal/git"
 	"wt/internal/hooks"
@@ -50,7 +51,11 @@ func CreateWorktree(opts CreateOptions) (string, error) {
 	}
 	if found {
 		termenv.Warn("%s", termenv.Bold(fmt.Sprintf("Worktree already exists\nBranch '%s' already has a worktree at:\n  %s", branch, existing.Path)))
-		if !termenv.IsNonInteractive() {
+		autoResume := true
+		if cfg, err := config.Load(); err == nil {
+			autoResume = config.AutoResume(cfg)
+		}
+		if !termenv.IsNonInteractive() && autoResume {
 			if termenv.Confirm("Resume work in this worktree instead?", true) {
 				if opts.NoTerm {
 					termenv.Info("\n%s\n", termenv.Dim("Worktree exists at: "+existing.Path))
@@ -509,6 +514,9 @@ func ResumeWorktree(opts ResumeOptions) error {
 	}
 
 	hasSession := session.Exists(branch) || session.ClaudeNativeSessionExists(worktreePath)
+	if cfg, err := config.Load(); err == nil && !config.AutoResume(cfg) {
+		hasSession = false
+	}
 
 	if ctx := session.LoadContext(branch); ctx != "" {
 		termenv.Info("\n%s", termenv.Bold("Previous context:"))

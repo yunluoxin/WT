@@ -27,6 +27,9 @@ var DefaultConfig = map[string]any{
 	"git": map[string]any{
 		"default_base_branch": "main",
 	},
+	"session": map[string]any{
+		"auto_resume": false,
+	},
 	"shell_completion": map[string]any{
 		"prompted":  false,
 		"installed": false,
@@ -147,6 +150,19 @@ func GetString(cfg map[string]any, dotPath string) string {
 func GetBool(cfg map[string]any, dotPath string) bool {
 	b, _ := Get(cfg, dotPath).(bool)
 	return b
+}
+
+// AutoResume reports whether launching should automatically continue an
+// existing AI session. Priority: WT_AUTO_RESUME env (1/true/yes enables,
+// 0/false/no disables) > config session.auto_resume (default false).
+func AutoResume(cfg map[string]any) bool {
+	switch strings.ToLower(envLookup("WT_AUTO_RESUME")) {
+	case "1", "true", "yes":
+		return true
+	case "0", "false", "no":
+		return false
+	}
+	return GetBool(cfg, "session.auto_resume")
 }
 
 // GetFloat is a typed accessor for numeric values.

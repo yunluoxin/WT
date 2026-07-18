@@ -178,3 +178,27 @@ func TestResumeAndMergePresets(t *testing.T) {
 		t.Errorf("claude-remote merge base override wrong: %v", mp.BaseOverride)
 	}
 }
+
+func TestAutoResume(t *testing.T) {
+	cfg := deepCopy(DefaultConfig)
+
+	if AutoResume(cfg) {
+		t.Error("AutoResume should default to false")
+	}
+
+	Set(cfg, "session.auto_resume", "true")
+	if !AutoResume(cfg) {
+		t.Error("AutoResume should respect session.auto_resume=true")
+	}
+
+	// Env var overrides config.
+	Set(cfg, "session.auto_resume", "false")
+	t.Setenv("WT_AUTO_RESUME", "1")
+	if !AutoResume(cfg) {
+		t.Error("WT_AUTO_RESUME=1 should enable auto resume")
+	}
+	t.Setenv("WT_AUTO_RESUME", "0")
+	if AutoResume(cfg) {
+		t.Error("WT_AUTO_RESUME=0 should disable auto resume even when config enables it")
+	}
+}

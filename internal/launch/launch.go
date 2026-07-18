@@ -84,14 +84,15 @@ func AITool(opts Options) error {
 
 	// Resolve command.
 	var argv []string
+	autoResume := config.AutoResume(cfg)
 	switch {
 	case opts.Prompt != "":
 		argv = aitool.MergeCommand(cfg, opts.Prompt)
-	case opts.Resume:
+	case opts.Resume && autoResume:
 		argv = aitool.ResumeCommand(cfg)
 	default:
 		// Smart --continue for Claude tools with an existing native session.
-		if aitool.IsClaudeTool(cfg) && session.ClaudeNativeSessionExists(opts.WorktreePath) {
+		if autoResume && aitool.IsClaudeTool(cfg) && session.ClaudeNativeSessionExists(opts.WorktreePath) {
 			argv = aitool.ResumeCommand(cfg)
 			termenv.Info("%s", termenv.Dim("Found existing Claude session, using --continue"))
 		} else {

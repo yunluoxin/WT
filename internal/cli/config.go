@@ -62,6 +62,10 @@ func configShowCmd() *cobra.Command {
 			termenv.Info("%s", termenv.Bold("Git:"))
 			termenv.Info("  default_base_branch: %s", config.GetString(cfg, "git.default_base_branch"))
 			fmt.Println()
+
+			termenv.Info("%s", termenv.Bold("Session:"))
+			termenv.Info("  auto_resume: %v", config.AutoResume(cfg))
+			fmt.Println()
 			return nil
 		},
 	}
