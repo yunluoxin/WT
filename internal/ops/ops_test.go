@@ -46,6 +46,32 @@ func TestPrefixBranch(t *testing.T) {
 	if got := PrefixBranch("wt-fix-auth"); got != "wt-fix-auth" {
 		t.Errorf("PrefixBranch = %q, want wt-fix-auth (unchanged)", got)
 	}
+	if !IsManagedBranch("wt-fix-auth") || IsManagedBranch("fix-auth") {
+		t.Error("IsManagedBranch misclassified")
+	}
+}
+
+func TestCustomPrefixesApplyEverywhere(t *testing.T) {
+	// Simulate a user/build changing both global prefixes; branch and
+	// worktree-directory prefixes must stay independent.
+	oldB, oldW := BranchPrefix, WorktreePrefix
+	BranchPrefix, WorktreePrefix = "cw-", "cwdir-"
+	t.Cleanup(func() { BranchPrefix, WorktreePrefix = oldB, oldW })
+
+	if got := PrefixBranch("fix"); got != "cw-fix" {
+		t.Errorf("PrefixBranch = %q, want cw-fix", got)
+	}
+	if got := PrefixBranch("cw-fix"); got != "cw-fix" {
+		t.Errorf("PrefixBranch should be idempotent, got %q", got)
+	}
+	repo := t.TempDir()
+	myrepo := filepath.Join(repo, "myrepo")
+	// Directory uses WorktreePrefix, not BranchPrefix.
+	got := DefaultWorktreePath(myrepo, "cw-fix")
+	want := filepath.Join(repo, "myrepo-cwdir-fix")
+	if got != want {
+		t.Errorf("DefaultWorktreePath = %q, want %q", got, want)
+	}
 }
 
 func TestCreatePrefixesBranchAndPath(t *testing.T) {
@@ -63,7 +89,7 @@ func TestCreatePrefixesBranchAndPath(t *testing.T) {
 	if git.BranchExists(repo, "feat-pre") {
 		t.Error("unprefixed branch should not exist")
 	}
-	wantDir := "myrepo-" + BranchPrefix + "feat-pre"
+	wantDir := "myrepo-" + WorktreePrefix + "feat-pre"
 	if base := filepath.Base(path); base != wantDir {
 		t.Errorf("worktree dir = %q, want %q", base, wantDir)
 	}

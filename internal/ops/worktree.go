@@ -229,7 +229,7 @@ func FinishWorktree(opts FinishOptions) error {
 	}
 	// By default only merge branches created by `wt new` (wt- prefix);
 	// --any opts out for foreign branches/worktrees.
-	if !opts.Any && !strings.HasPrefix(feature, BranchPrefix) {
+	if !opts.Any && !IsManagedBranch(feature) {
 		return wterrors.New(wterrors.ErrProtectedWorktree,
 			"branch '%s' was not created by wt (missing '%s' prefix).\nHint: use 'wt merge --any' to merge it anyway, or create worktrees with 'wt new'.",
 			feature, BranchPrefix)
