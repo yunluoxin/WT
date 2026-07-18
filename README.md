@@ -1,0 +1,96 @@
+# wt — git worktree manager (Go)
+
+`wt` is a Go rewrite of [claude-worktree](https://github.com/DaveDev42/claude-worktree) (`cw`).
+It creates isolated git worktrees for feature branches, launches your AI
+coding assistant (Claude Code, Codex, or custom) in them, and cleanly
+merges changes back.
+
+Compared to the Python version: single static binary, faster startup, no
+runtime dependencies.
+
+## Install
+
+```bash
+# From source
+cd go && go install ./cmd/wt
+
+# Or build locally
+cd go && go build -o wt ./cmd/wt
+```
+
+## Quick start
+
+```bash
+wt new fix-auth        # create worktree ../<repo>-fix-auth + launch AI tool
+wt list                # list worktrees
+wt resume fix-auth     # resume AI session in a worktree
+wt pr                  # rebase, push, create GitHub PR (requires gh)
+wt merge               # rebase + fast-forward merge into base + cleanup
+```
+
+## Commands
+
+| Group | Commands |
+|---|---|
+| Core workflow | `new`, `resume`, `pr`, `merge`, `finish` (deprecated alias), `shell` |
+| Worktree management | `list`, `status`, `delete`, `clean`, `sync`, `change-base` |
+| Global (cross-repo) | `-g/--global` flag, `scan`, `prune` |
+| Inspection | `doctor`, `diff`, `tree`, `stats` |
+| Stash | `stash save`, `stash list`, `stash apply` |
+| Backup | `backup create`, `backup list`, `backup restore` |
+| Hooks | `hook add/remove/list/enable/disable/run` (12 lifecycle events, `.cwconfig.json`) |
+| Config | `config show/set/use-preset/list-presets/reset`, `export`, `import` |
+| Shell integration | `shell-setup`, `completion <shell>`, `wt-cd` (via `_shell-function`) |
+
+### AI tool presets
+
+`wt config use-preset <name>`: `claude` (default), `claude-yolo`,
+`claude-remote`, `claude-yolo-remote`, `codex`, `codex-yolo`, `no-op`.
+
+### Launch methods (`--term`)
+
+`foreground` (default), `detach`, `iterm-window/tab/pane-h/pane-v`,
+`tmux[:name]/tmux-window/tmux-pane-h/pane-v`,
+`zellij[:name]/zellij-tab/zellij-pane-h/pane-v`,
+`wezterm-window/tab/pane-h/pane-v`. Short aliases: `fg`, `d`, `i-w`,
+`i-t`, `t`, `z`, `w-w`, …
+
+### Configuration
+
+- Config file: `~/.config/wt/config.json` (honors `XDG_CONFIG_HOME`)
+- Sessions: `~/.config/wt/sessions/<branch>/`
+- Backups: `~/.config/wt/backups/`
+- Registry (global mode): `~/.config/wt/registry.json`
+- Per-repo hooks: `<repo>/.cwconfig.json`
+- Shared files to copy into new worktrees: `<repo>/.cwshare`
+- Env overrides: `WT_AI_TOOL`, `WT_LAUNCH_METHOD`, `WT_NON_INTERACTIVE`
+
+### Shell integration (wt-cd)
+
+```bash
+wt shell-setup                         # auto-install into your profile
+# or manually:
+source <(wt _shell-function bash)      # bash/zsh
+wt _shell-function fish | source       # fish
+```
+
+Then `wt-cd <branch>` jumps to a worktree; `wt-cd` alone opens an
+interactive selector; `wt-cd -g repo:branch` works across repositories.
+
+## Differences from the Python version
+
+- No `upgrade` command / update checks (no PyPI for Go binaries)
+- New config location (`~/.config/wt/`); Python config is not migrated
+- Env var prefix is `WT_*` (was `CW_*`), including hook env injection
+- Deprecated hidden flags (`--bg`, `--iterm`, `--iterm-tab`, `--tmux`) removed — use `--term`
+- Fixed: `launch.session_prefix` is now honored consistently
+
+## Development
+
+```bash
+cd go
+go build ./...
+go test ./... -race
+```
+
+Releases: see [RELEASING.md](RELEASING.md).

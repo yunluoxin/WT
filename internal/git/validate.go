@@ -6,7 +6,12 @@ import (
 )
 
 // IsValidBranchName reports whether name passes `git check-ref-format --branch`.
+// Note: git's check-ref-format accepts "@" alone, which is not a usable
+// branch name, so we reject it explicitly (as does the Python version).
 func IsValidBranchName(name string) bool {
+	if name == "@" {
+		return false
+	}
 	res, err := Git("", false, "check-ref-format", "--branch", name)
 	return err == nil && res.ExitCode == 0
 }

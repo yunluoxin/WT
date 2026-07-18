@@ -16,9 +16,20 @@ import (
 	"wt/internal/termenv"
 )
 
+// backupsDirOverride, when non-empty, replaces the default backups root.
+// Set by tests; also honored for restore/list of backups created with
+// a custom --output directory.
+var backupsDirOverride string
+
+// SetBackupsDirOverride overrides the backups root (test hook).
+func SetBackupsDirOverride(dir string) { backupsDirOverride = dir }
+
 // BackupsDir returns the backups root (~/.config/wt/backups/).
 func BackupsDir() (string, error) {
-	dir := filepath.Join(config.Dir(), "backups")
+	dir := backupsDirOverride
+	if dir == "" {
+		dir = filepath.Join(config.Dir(), "backups")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
