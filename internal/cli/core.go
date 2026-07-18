@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"wt/internal/ops"
@@ -201,6 +204,45 @@ func resumeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&term, "term", "T", "", "Launch method (e.g. i-t, t:mysession, z-p-h)")
 	_ = cmd.RegisterFlagCompletionFunc("term", termFlagCompletion)
 	tf.add(cmd)
+	return cmd
+}
+
+// cdCmd prints the path of a worktree so a shell wrapper can cd into it.
+// Prints ONLY the path to stdout; all UI/errors go to stderr.
+func cdCmd() *cobra.Command {
+	var globalFlag, interactive bool
+	cmd := &cobra.Command{
+		Use:   "cd [branch|repo:branch]",
+		Short: "Print the path of a worktree",
+		Long: `Print the absolute path of a worktree.
+
+A subprocess cannot change the parent shell's directory, so pair this
+with your shell, e.g.: cd "$(wt cd <branch>)". Without a target, or
+with --interactive, an interactive selector is shown.`,
+		Args: cobra.MaximumNArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if globalFlag {
+				return completeGlobalTargets(toComplete), cobra.ShellCompDirectiveNoFileComp
+			}
+			return completeWorktreeBranches(toComplete), cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := firstArg(args)
+			// repo:branch notation implies global mode.
+			if !globalFlag {
+				if r, _ := ops.ParseRepoBranchTarget(target); r != "" {
+					globalFlag = true
+				}
+			}
+			if err := ops.CDWorktree(target, globalFlag, interactive); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				return &exitError{code: 1}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVarP(&globalFlag, "global", "g", false, "Search across all registered repositories")
+	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Interactive arrow-key selector")
 	return cmd
 }
 

@@ -4,14 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"wt/internal/git"
 	"wt/internal/ops"
-	"wt/internal/shellfn"
-	"wt/internal/termenv"
 	"wt/internal/tui"
 )
 
@@ -130,106 +127,4 @@ func samePathStr(a, b string) bool {
 	aa, _ := filepath.Abs(a)
 	bb, _ := filepath.Abs(b)
 	return filepath.Clean(aa) == filepath.Clean(bb)
-}
-
-// shellFunctionCmd prints the bundled shell integration script.
-func shellFunctionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:    "_shell-function <shell>",
-		Short:  "Print shell integration script (internal)",
-		Hidden: true,
-		Args:   cobra.ExactArgs(1),
-		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return []string{"bash", "zsh", "fish", "powershell", "pwsh"}, cobra.ShellCompDirectiveNoFileComp
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			script, err := shellfn.Script(args[0])
-			if err != nil {
-				return err
-			}
-			fmt.Print(script)
-			return nil
-		},
-	}
-}
-
-// shellSetupCmd appends sourcing lines to the user's shell profile.
-func shellSetupCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "shell-setup",
-		Short: "Install shell integration (wt-cd) into your shell profile",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			shell := detectShell()
-			switch shell {
-			case "powershell", "pwsh":
-				termenv.Info("\n%s\n", termenv.Bold(termenv.Cyan("PowerShell setup")))
-				termenv.Info("Add the following line to your PowerShell profile:\n")
-				termenv.Info("  %s\n", termenv.Cyan("wt _shell-function powershell | Out-String | Invoke-Expression"))
-				termenv.Info("To find your profile path, run: %s\n", termenv.Cyan("$PROFILE"))
-				return nil
-			case "":
-				return errf("could not detect your shell. Supported: bash, zsh, fish, powershell")
-			}
-
-			profile := shellProfile(shell)
-			line := shellSourceLine(shell)
-
-			existing, _ := os.ReadFile(profile)
-			if strings.Contains(string(existing), "wt _shell-function") || strings.Contains(string(existing), "wt-cd") {
-				termenv.Success("Shell integration already installed in %s\n", profile)
-				return nil
-			}
-
-			f, err := os.OpenFile(profile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if _, err := f.WriteString("\n# wt shell integration (wt-cd)\n" + line + "\n"); err != nil {
-				return err
-			}
-			termenv.Success("Added wt shell integration to %s\n", profile)
-			termenv.Info("Restart your shell or run: %s\n", termenv.Cyan("source "+profile))
-			return nil
-		},
-	}
-}
-
-// detectShell identifies the current shell from $SHELL / environment.
-func detectShell() string {
-	if psModule := os.Getenv("PSModulePath"); psModule != "" && os.Getenv("SHELL") == "" {
-		return "powershell"
-	}
-	shell := filepath.Base(os.Getenv("SHELL"))
-	switch shell {
-	case "bash", "zsh", "fish":
-		return shell
-	case "pwsh", "powershell":
-		return "powershell"
-	}
-	return ""
-}
-
-func shellProfile(shell string) string {
-	home, _ := os.UserHomeDir()
-	switch shell {
-	case "bash":
-		return filepath.Join(home, ".bashrc")
-	case "zsh":
-		return filepath.Join(home, ".zshrc")
-	case "fish":
-		return filepath.Join(home, ".config", "fish", "config.fish")
-	}
-	return ""
-}
-
-func shellSourceLine(shell string) string {
-	switch shell {
-	case "bash", "zsh":
-		return `source <(wt _shell-function ` + shell + `)`
-	case "fish":
-		return `wt _shell-function fish | source`
-	}
-	return ""
 }

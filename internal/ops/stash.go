@@ -115,10 +115,7 @@ func StashApply(targetBranch, stashRef string) error {
 	if stashRef == "" {
 		stashRef = "stash@{0}"
 	}
-	wt, found, err := git.FindWorktreeByBranch(repo, targetBranch)
-	if err != nil {
-		return err
-	}
+	wt, matchedBranch, found := findWorktreeByBranchish(repo, targetBranch)
 	if !found {
 		return wterrors.New(wterrors.ErrWorktreeNotFound,
 			"no worktree found for branch '%s'. Use 'wt list' to see available worktrees.", targetBranch)
@@ -130,7 +127,7 @@ func StashApply(targetBranch, stashRef string) error {
 			"stash '%s' not found. Use 'wt stash list' to see available stashes.", stashRef)
 	}
 
-	termenv.Info("\n%s", termenv.Yellow(fmt.Sprintf("Applying %s to %s...", stashRef, targetBranch)))
+	termenv.Info("\n%s", termenv.Yellow(fmt.Sprintf("Applying %s to %s...", stashRef, matchedBranch)))
 	if _, err := git.Git(wt.Path, true, "stash", "apply", stashRef); err != nil {
 		termenv.Error("Failed to apply stash: %v\n", err)
 		termenv.Info("%s There may be conflicts. Check the worktree and resolve manually.\n", termenv.Yellow("Tip:"))

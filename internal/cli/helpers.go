@@ -37,6 +37,12 @@ func resolveIfWorktree(name string) (string, bool, error) {
 	if wt, found, err := git.FindWorktreeByIntendedBranch(repo, name, ops.SanitizeBranchName); err == nil && found {
 		return wt.Path, true, nil
 	}
+	// Users refer to wt-managed branches without the internal prefix.
+	if prefixed := ops.PrefixBranch(name); prefixed != name {
+		if wt, found, err := git.FindWorktreeByIntendedBranch(repo, prefixed, ops.SanitizeBranchName); err == nil && found {
+			return wt.Path, true, nil
+		}
+	}
 	if wt, found, err := git.FindWorktreeByBranch(repo, name); err == nil && found {
 		return wt.Path, true, nil
 	}

@@ -58,7 +58,7 @@ func NewRootCmd() *cobra.Command {
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Skip side effects for internal commands.
 			switch cmd.Name() {
-			case "_path", "_shell-function", "completion":
+			case "_path", "cd", "init", "completion":
 				return
 			}
 			share.PromptSetup()
@@ -79,7 +79,7 @@ func NewRootCmd() *cobra.Command {
 		syncCmd(), cleanCmd(), changeBaseCmd(), doctorCmd(), diffCmd(),
 		treeCmd(), statsCmd(), stashCmd(), exportCmd(), importCmd(),
 		backupCmd(), hookCmd(), scanCmd(), pruneCmd(),
-		pathCmd(), shellFunctionCmd(), shellSetupCmd(),
+		pathCmd(), cdCmd(), initCmd(),
 	)
 	return root
 }
@@ -90,6 +90,12 @@ func Execute() {
 	if err := root.Execute(); err != nil {
 		if errors.Is(err, wterrors.ErrAborted) {
 			os.Exit(0)
+		}
+		// Commands that already printed their error (e.g. to keep stdout
+		// clean for shell capture) signal it with exitError.
+		var ee *exitError
+		if errors.As(err, &ee) {
+			os.Exit(ee.code)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

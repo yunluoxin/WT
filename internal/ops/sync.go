@@ -278,20 +278,19 @@ func ChangeBase(opts ChangeBaseOptions) error {
 
 // ShellWorktree opens an interactive shell or runs a command in a worktree.
 func ShellWorktree(worktree string, command []string) (int, error) {
-	repo, err := git.RepoRoot("")
+	_, err := git.RepoRoot("")
 	if err != nil {
 		return 1, err
 	}
 	var targetPath string
+	branchName := worktree
 	if worktree != "" {
-		wt, found, err := git.FindWorktreeByBranch(repo, worktree)
+		t, err := ResolveWorktreeTarget(worktree, LookupAuto, false)
 		if err != nil {
 			return 1, err
 		}
-		if !found {
-			return 1, fmt.Errorf("no worktree found for branch '%s'", worktree)
-		}
-		targetPath = wt.Path
+		targetPath = t.WorktreePath
+		branchName = t.Branch
 	} else {
 		targetPath, err = os.Getwd()
 		if err != nil {
@@ -310,7 +309,6 @@ func ShellWorktree(worktree string, command []string) (int, error) {
 		return runInDir(targetPath, command[0], command[1:]...)
 	}
 
-	branchName := worktree
 	if branchName == "" {
 		branchName, _ = git.CurrentBranch(targetPath)
 	}

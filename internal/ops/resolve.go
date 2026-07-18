@@ -38,6 +38,22 @@ func ParseRepoBranchTarget(target string) (repoName, branch string) {
 	return "", target
 }
 
+// findWorktreeByBranchish locates a worktree by intended branch, first as
+// given, then with BranchPrefix applied: users refer to wt-managed branches
+// without the internal prefix. Returns the worktree and the branch name that
+// matched (the intended branch, including any prefix).
+func findWorktreeByBranchish(repo, target string) (git.Worktree, string, bool) {
+	if wt, found, err := git.FindWorktreeByIntendedBranch(repo, target, SanitizeBranchName); err == nil && found {
+		return wt, target, true
+	}
+	if prefixed := PrefixBranch(target); prefixed != target {
+		if wt, found, err := git.FindWorktreeByIntendedBranch(repo, prefixed, SanitizeBranchName); err == nil && found {
+			return wt, prefixed, true
+		}
+	}
+	return git.Worktree{}, "", false
+}
+
 // ResolveWorktreeTarget resolves a target string (or "" for cwd) to a
 // worktree path, branch name and the worktree's git root.
 func ResolveWorktreeTarget(target string, mode LookupMode, global bool) (Target, error) {
@@ -70,12 +86,15 @@ func ResolveWorktreeTarget(target string, mode LookupMode, global bool) (Target,
 		return Target{}, err
 	}
 
-	var branchMatch, worktreeMatch *git.Worktree
+	var branchMatch *git.Worktree
+	matchedBranch := target
 	if mode != LookupWorktree {
-		if wt, found, err := git.FindWorktreeByIntendedBranch(mainRepo, target, SanitizeBranchName); err == nil && found {
+		if wt, branch, found := findWorktreeByBranchish(mainRepo, target); found {
 			branchMatch = &wt
+			matchedBranch = branch
 		}
 	}
+	var worktreeMatch *git.Worktree
 	if mode != LookupBranch {
 		if wt, found, err := git.FindWorktreeByName(mainRepo, target); err == nil && found {
 			worktreeMatch = &wt
@@ -88,7 +107,7 @@ func ResolveWorktreeTarget(target string, mode LookupMode, global bool) (Target,
 		return Target{}, wterrors.New(wterrors.ErrWorktreeNotFound, "no worktree found with name '%s'", target)
 	}
 
-	path, branch, err := resolveDualMatch(target, branchMatch, worktreeMatch, mainRepo)
+	path, branch, err := resolveDualMatch(target, matchedBranch, branchMatch, worktreeMatch, mainRepo)
 	if err != nil {
 		return Target{}, err
 	}
@@ -128,19 +147,19 @@ func branchForWorktree(repo, worktreePath string) string {
 	return ""
 }
 
-func resolveDualMatch(target string, branchMatch, worktreeMatch *git.Worktree, mainRepo string) (string, string, error) {
+func resolveDualMatch(target, matchedBranch string, branchMatch, worktreeMatch *git.Worktree, mainRepo string) (string, string, error) {
 	switch {
 	case branchMatch != nil && worktreeMatch != nil:
 		if samePath(branchMatch.Path, worktreeMatch.Path) {
-			return branchMatch.Path, target, nil
+			return branchMatch.Path, matchedBranch, nil
 		}
 		if termenv.IsNonInteractive() {
 			return "", "", wterrors.New(wterrors.ErrAmbiguousTarget,
 				"ambiguous target '%s' matches both a branch and a worktree name.\n  Branch '%s' → %s\n  Worktree '%s' → %s\nUse --branch (-b) or --worktree (-w) flag to specify which one.",
-				target, target, branchMatch.Path, filepath.Base(worktreeMatch.Path), worktreeMatch.Path)
+				target, matchedBranch, branchMatch.Path, filepath.Base(worktreeMatch.Path), worktreeMatch.Path)
 		}
 		fmt.Printf("\n%s\n", termenv.Yellow(fmt.Sprintf("Multiple matches found for '%s':", target)))
-		fmt.Printf("  [1] Branch '%s' → %s\n", target, branchMatch.Path)
+		fmt.Printf("  [1] Branch '%s' → %s\n", matchedBranch, branchMatch.Path)
 		fmt.Printf("  [2] Worktree '%s' → %s\n", filepath.Base(worktreeMatch.Path), worktreeMatch.Path)
 		fmt.Println()
 		reader := bufio.NewReader(os.Stdin)
@@ -149,7 +168,7 @@ func resolveDualMatch(target string, branchMatch, worktreeMatch *git.Worktree, m
 			choice, _ := reader.ReadString('\n')
 			switch strings.TrimSpace(choice) {
 			case "1":
-				return branchMatch.Path, target, nil
+				return branchMatch.Path, matchedBranch, nil
 			case "2":
 				branch := branchForWorktree(mainRepo, worktreeMatch.Path)
 				if branch == "" {
@@ -161,7 +180,7 @@ func resolveDualMatch(target string, branchMatch, worktreeMatch *git.Worktree, m
 			}
 		}
 	case branchMatch != nil:
-		return branchMatch.Path, target, nil
+		return branchMatch.Path, matchedBranch, nil
 	case worktreeMatch != nil:
 		branch := branchForWorktree(mainRepo, worktreeMatch.Path)
 		if branch == "" {
@@ -197,9 +216,11 @@ func resolveGlobalTarget(target string, mode LookupMode) (Target, error) {
 			continue
 		}
 		var branchMatch, worktreeMatch *git.Worktree
+		matchedBranch := branchTarget
 		if mode != LookupWorktree {
-			if wt, found, err := git.FindWorktreeByIntendedBranch(repoPath, branchTarget, SanitizeBranchName); err == nil && found {
+			if wt, branch, found := findWorktreeByBranchish(repoPath, branchTarget); found {
 				branchMatch = &wt
+				matchedBranch = branch
 			}
 		}
 		if mode != LookupBranch {
@@ -209,7 +230,7 @@ func resolveGlobalTarget(target string, mode LookupMode) (Target, error) {
 		}
 		switch {
 		case branchMatch != nil && worktreeMatch != nil:
-			matches = append(matches, globalMatch{branchMatch.Path, branchTarget, repoPath, name})
+			matches = append(matches, globalMatch{branchMatch.Path, matchedBranch, repoPath, name})
 			if !samePath(branchMatch.Path, worktreeMatch.Path) {
 				b := branchForWorktree(repoPath, worktreeMatch.Path)
 				if b == "" {
@@ -218,7 +239,7 @@ func resolveGlobalTarget(target string, mode LookupMode) (Target, error) {
 				matches = append(matches, globalMatch{worktreeMatch.Path, b, repoPath, name})
 			}
 		case branchMatch != nil:
-			matches = append(matches, globalMatch{branchMatch.Path, branchTarget, repoPath, name})
+			matches = append(matches, globalMatch{branchMatch.Path, matchedBranch, repoPath, name})
 		case worktreeMatch != nil:
 			b := branchForWorktree(repoPath, worktreeMatch.Path)
 			if b == "" {

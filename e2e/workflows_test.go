@@ -258,19 +258,218 @@ func TestPathCommand(t *testing.T) {
 	}
 }
 
-func TestShellFunctionOutput(t *testing.T) {
+func TestCDCommand(t *testing.T) {
 	repo := testutil.NewRepo(t)
+	home := sharedHome(t)
+	if _, _, err := runHome(t, repo, home, "new", "cd-test", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	// Resolve by full branch name.
+	out, _, err := runHome(t, repo, home, "cd", "wt-cd-test")
+	if err != nil {
+		t.Fatalf("cd: %v", err)
+	}
+	want := filepath.Join(filepath.Dir(repo), "myrepo-wt-cd-test")
+	got := strings.TrimSpace(out)
+	gotR, _ := filepath.EvalSymlinks(got)
+	wantR, _ := filepath.EvalSymlinks(want)
+	if gotR != wantR {
+		t.Errorf("cd = %q, want %q", got, want)
+	}
+
+	// Resolve without the internal wt- prefix (users never type it).
+	out, _, err = runHome(t, repo, home, "cd", "cd-test")
+	if err != nil {
+		t.Fatalf("cd (no prefix): %v", err)
+	}
+	if strings.TrimSpace(out) != got {
+		t.Errorf("cd (no prefix) = %q, want %q", strings.TrimSpace(out), got)
+	}
+
+	// repo:branch notation implies global mode (also without prefix).
+	out, _, err = runHome(t, repo, home, "cd", "myrepo:cd-test")
+	if err != nil {
+		t.Fatalf("cd repo:branch: %v", err)
+	}
+	if strings.TrimSpace(out) != got {
+		t.Errorf("cd repo:branch = %q, want %q", strings.TrimSpace(out), got)
+	}
+
+	// Unknown target fails with a non-zero exit code.
+	if _, _, err := runHome(t, repo, home, "cd", "no-such-branch"); err == nil {
+		t.Error("expected error for unknown branch")
+	}
+}
+
+func TestUnprefixedTargets(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "np-test", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-np-test")
+
+	// stash save (inside the worktree, tracked change), then apply by
+	// unprefixed name. The apply resolves the target worktree even though
+	// the stash ref itself may not exist in the main repo.
+	testutil.WriteFile(t, wtPath, "stashed.txt", "stash me\n")
+	testutil.Commit(t, wtPath, "add stashed.txt")
+	testutil.WriteFile(t, wtPath, "stashed.txt", "modified\n")
+	if _, _, err := run(t, wtPath, "stash", "save"); err != nil {
+		t.Fatalf("stash save: %v", err)
+	}
+	_, _, _ = run(t, repo, "stash", "apply", "np-test")
+
+	// shell runs a command in a worktree by unprefixed branch name.
+	out, _, err := run(t, repo, "shell", "np-test", "pwd")
+	if err != nil {
+		t.Fatalf("shell (unprefixed): %v", err)
+	}
+	if !strings.Contains(out, "myrepo-wt-np-test") {
+		t.Errorf("shell pwd missing worktree path:\n%s", out)
+	}
+
+	// delete by unprefixed branch name.
+	if _, _, err := run(t, repo, "delete", "np-test"); err != nil {
+		t.Fatalf("delete (unprefixed): %v", err)
+	}
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree not removed after unprefixed delete")
+	}
+}
+
+func TestUnprefixedMerge(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "np-merge", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-np-merge")
+	testutil.WriteFile(t, wtPath, "merged.txt", "content\n")
+	testutil.Commit(t, wtPath, "feature commit")
+
+	// merge by unprefixed branch name: must resolve to wt-np-merge,
+	// rebase that real branch, and clean up.
+	out, _, err := run(t, repo, "merge", "np-merge")
+	if err != nil {
+		t.Fatalf("merge (unprefixed): %v\n%s", err, out)
+	}
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree not removed after unprefixed merge")
+	}
+	if _, err := os.Stat(filepath.Join(repo, "merged.txt")); err != nil {
+		t.Error("feature commit not merged to main")
+	}
+}
+
+func TestInitCommand(t *testing.T) {
+	repo := testutil.NewRepo(t)
+
+	// --print emits the snippet for each supported shell.
 	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
-		out, _, err := run(t, repo, "_shell-function", shell)
+		out, _, err := run(t, repo, "init", shell, "--print")
 		if err != nil {
-			t.Fatalf("_shell-function %s: %v", shell, err)
+			t.Fatalf("init %s --print: %v", shell, err)
 		}
 		if !strings.Contains(out, "wt-cd") {
-			t.Errorf("_shell-function %s missing wt-cd", shell)
+			t.Errorf("init %s snippet missing wt-cd:\n%s", shell, out)
+		}
+		if !strings.Contains(out, "wt completion") {
+			t.Errorf("init %s snippet missing completion:\n%s", shell, out)
 		}
 	}
-	if _, _, err := run(t, repo, "_shell-function", "tcsh"); err == nil {
+
+	// Unsupported shell errors out.
+	if _, _, err := run(t, repo, "init", "tcsh", "--print"); err == nil {
 		t.Error("expected error for unsupported shell")
+	}
+
+	// Writing to a profile under a temp HOME.
+	home := t.TempDir()
+	runWithHome := func(args ...string) (string, error) {
+		cmd := exec.Command(binaryPath, args...)
+		cmd.Dir = repo
+		cmd.Env = []string{
+			"PATH=" + os.Getenv("PATH"),
+			"HOME=" + home,
+			"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
+			"WT_NON_INTERACTIVE=1",
+		}
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	out, err := runWithHome("init", "zsh")
+	if err != nil {
+		t.Fatalf("init zsh (write): %v\n%s", err, out)
+	}
+	profile := filepath.Join(home, ".zshrc")
+	if data, err := os.ReadFile(profile); err != nil || !strings.Contains(string(data), "wt-cd") {
+		t.Errorf("profile not written or missing wt-cd: %v", err)
+	}
+	// Idempotent: second run reports already installed.
+	out, err = runWithHome("init", "zsh")
+	if err != nil {
+		t.Fatalf("init zsh (2nd): %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "already") {
+		t.Errorf("expected 'already installed' message:\n%s", out)
+	}
+}
+
+func TestInitDoesNotMatchComments(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	home := t.TempDir()
+	// A profile that only mentions wt-cd in a COMMENT (and an old
+	// _shell-function line) must NOT count as "already installed".
+	profile := filepath.Join(home, ".zshrc")
+	stale := "# wt shell integration (wt-cd)\nsource <(wt _shell-function zsh)\n"
+	if err := os.WriteFile(profile, []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binaryPath, "init", "zsh")
+	cmd.Dir = repo
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "WT_NON_INTERACTIVE=1"}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, out)
+	}
+	data, _ := os.ReadFile(profile)
+	if !strings.Contains(string(data), "# >>> wt shell integration") {
+		t.Errorf("init did not install over stale comment-only profile:\n%s", data)
+	}
+	// The stale _shell-function line is left untouched (not ours to manage),
+	// but the new block must be appended.
+	if !strings.Contains(string(data), "source <(wt completion zsh)") {
+		t.Errorf("init missing completion line:\n%s", data)
+	}
+}
+
+func TestInitUpgradesOldBlock(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	home := t.TempDir()
+	// A profile with an OLD-version managed block gets it replaced.
+	profile := filepath.Join(home, ".zshrc")
+	old := "export X=1\n# >>> wt shell integration (v0) >>>\nOLD-STUFF\n# <<< wt shell integration <<<\nexport Y=2\n"
+	if err := os.WriteFile(profile, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binaryPath, "init", "zsh")
+	cmd.Dir = repo
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "WT_NON_INTERACTIVE=1"}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, out)
+	}
+	data, _ := os.ReadFile(profile)
+	s := string(data)
+	if strings.Contains(s, "OLD-STUFF") {
+		t.Errorf("old block not replaced:\n%s", s)
+	}
+	if !strings.Contains(s, "source <(wt completion zsh)") {
+		t.Errorf("new block missing:\n%s", s)
+	}
+	if !strings.Contains(s, "export X=1") || !strings.Contains(s, "export Y=2") {
+		t.Errorf("content outside block was clobbered:\n%s", s)
 	}
 }
 

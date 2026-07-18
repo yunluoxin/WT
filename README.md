@@ -45,7 +45,7 @@ unless you pass `--any`.
 | Backup | `backup create`, `backup list`, `backup restore` |
 | Hooks | `hook add/remove/list/enable/disable/run` (12 lifecycle events, `.wtconfig.json`) |
 | Config | `config show/set/use-preset/list-presets/reset`, `export`, `import` |
-| Shell integration | `shell-setup`, `completion <shell>`, `wt-cd` (via `_shell-function`) |
+| Shell integration | `cd`, `init`, `completion <shell>` |
 
 ### AI tool presets
 
@@ -70,17 +70,39 @@ unless you pass `--any`.
 - Shared files to copy into new worktrees: `<repo>/.wtshare`
 - Env overrides: `WT_AI_TOOL`, `WT_LAUNCH_METHOD`, `WT_NON_INTERACTIVE`
 
-### Shell integration (wt-cd)
+### Shell integration (wt cd + completion)
+
+`wt cd <branch>` prints the worktree path (with `-g`/`repo:branch` for
+cross-repo lookup, or an interactive selector when no target is given).
+A subprocess can't change the parent shell's directory, so the shell
+side needs a one-line function plus completion. `wt init` installs both:
 
 ```bash
-wt shell-setup                         # auto-install into your profile
-# or manually:
-source <(wt _shell-function bash)      # bash/zsh
-wt _shell-function fish | source       # fish
+wt init            # auto-detect shell, append snippet to your profile
+wt init zsh        # explicit shell: bash | zsh | fish | powershell
+wt init --print    # print the snippet instead of writing the profile
 ```
 
-Then `wt-cd <branch>` jumps to a worktree; `wt-cd` alone opens an
-interactive selector; `wt-cd -g repo:branch` works across repositories.
+The snippet is deliberately minimal — all logic lives in the binary:
+
+```bash
+# bash / zsh
+wt-cd() { cd "$(wt cd "$@")"; }
+source <(wt completion bash)   # or: source <(wt completion zsh)
+
+# fish
+function wt-cd; cd (wt cd $argv); end
+wt completion fish | source
+
+# powershell
+function wt-cd { Set-Location (wt cd @args) }
+wt completion powershell | Out-String | Invoke-Expression
+```
+
+After restarting your shell: `wt-cd <branch>` jumps to a worktree,
+`wt-cd` alone opens an interactive selector, `wt-cd -g repo:branch`
+works across repositories, and `<TAB>` completes branch names and flags
+for every `wt` subcommand.
 
 ## Differences from the Python version
 
