@@ -51,29 +51,15 @@ func CreateWorktree(opts CreateOptions) (string, error) {
 	}
 	if found {
 		termenv.Warn("%s", termenv.Bold(fmt.Sprintf("Worktree already exists\nBranch '%s' already has a worktree at:\n  %s", branch, existing.Path)))
-		autoResume := true
-		if cfg, err := config.Load(); err == nil {
-			autoResume = config.AutoResume(cfg)
+		if opts.NoTerm {
+			termenv.Info("\n%s\n", termenv.Dim("Worktree exists at: "+existing.Path))
+			return existing.Path, nil
 		}
-		if !termenv.IsNonInteractive() && autoResume {
-			if termenv.Confirm("Resume work in this worktree instead?", true) {
-				if opts.NoTerm {
-					termenv.Info("\n%s\n", termenv.Dim("Worktree exists at: "+existing.Path))
-				} else {
-					termenv.Info("\n%s\n", termenv.Dim(fmt.Sprintf("Switching to resume mode for '%s'...", branch)))
-					if err := ResumeWorktree(ResumeOptions{Worktree: branch, Term: opts.Term}); err != nil {
-						return "", err
-					}
-				}
-				return existing.Path, nil
-			}
-			termenv.Info("\n%s Try a different branch name or use:\n  %s\n  %s\n",
-				termenv.Yellow("Tip:"), termenv.Cyan("wt new "+branch+"-v2"), termenv.Cyan("wt new "+branch+"-alt"))
-			return "", wterrors.New(wterrors.ErrAborted, "operation cancelled")
+		termenv.Info("\n%s\n", termenv.Dim(fmt.Sprintf("Switching to resume mode for '%s'...", branch)))
+		if err := ResumeWorktree(ResumeOptions{Worktree: branch, Term: opts.Term}); err != nil {
+			return "", err
 		}
-		return "", wterrors.New(wterrors.ErrInvalidBranch,
-			"worktree for branch '%s' already exists at %s.\nUse 'wt resume %s' to continue work, or choose a different branch name.",
-			branch, existing.Path, branch)
+		return existing.Path, nil
 	}
 
 	branchAlreadyExists := false

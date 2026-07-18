@@ -144,9 +144,14 @@ func TestCreateAndResolveWorktree(t *testing.T) {
 		t.Errorf("branch = %q", target.Branch)
 	}
 
-	// Duplicate creation fails in non-interactive mode.
-	if _, err := CreateWorktree(CreateOptions{BranchName: "feat-1", NoTerm: true}); err == nil {
-		t.Error("expected error for duplicate worktree")
+	// Duplicate creation auto-resumes: returns the existing worktree path
+	// instead of failing.
+	dupPath, err := CreateWorktree(CreateOptions{BranchName: "feat-1", NoTerm: true})
+	if err != nil {
+		t.Errorf("expected auto-resume for duplicate worktree, got error: %v", err)
+	}
+	if dupPath != path {
+		t.Errorf("duplicate creation returned %q, want existing path %q", dupPath, path)
 	}
 }
 

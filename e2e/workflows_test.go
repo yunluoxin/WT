@@ -165,12 +165,17 @@ func TestRebaseConflictAbort(t *testing.T) {
 func TestErrorCases(t *testing.T) {
 	repo := testutil.NewRepo(t)
 
-	// Duplicate worktree creation fails (non-interactive).
+	// Duplicate worktree creation auto-resumes: it succeeds and reports the
+	// existing worktree instead of failing.
 	if _, _, err := run(t, repo, "new", "dup", "--no-term"); err != nil {
 		t.Fatalf("first new: %v", err)
 	}
-	if _, stderr, err := run(t, repo, "new", "dup", "--no-term"); err == nil {
-		t.Errorf("expected duplicate creation to fail\n%s", stderr)
+	out, stderr, err := run(t, repo, "new", "dup", "--no-term")
+	if err != nil {
+		t.Errorf("expected duplicate creation to auto-resume, got error:\n%s", stderr)
+	}
+	if !strings.Contains(out+stderr, "already exists") {
+		t.Errorf("expected duplicate creation to mention existing worktree:\n%s\n%s", out, stderr)
 	}
 
 	// Delete nonexistent worktree fails.
