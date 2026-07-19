@@ -220,7 +220,8 @@ Examples:
   wt backup list wt-fix-auth
   wt backup restore wt-fix-auth
   wt backup restore wt-fix-auth --id 20260719-112233 -p /tmp/recovered`},
-	{"hook", `wt hook add <event> <command> [--id <id>] [-d <desc>]
+	{"hook", `wt hook init
+wt hook add <event> <command> [--id <id>] [-d <desc>]
 wt hook list [event]
 wt hook remove|enable|disable <event> <hook-id>
 wt hook run <event> [--dry-run]
@@ -235,6 +236,9 @@ wt hook run <event> [--dry-run]
     sync.pre               sync.post
   An unknown event fails with: unknown hook event "<name>".
   Subcommands:
+    init                             install .wt-hooks/post-create.sh (auto-
+                                     installs JS/Python/Go/Rust deps) and
+                                     enable it; idempotent, never overwrites
     add <event> <command>            register a hook (--id custom id,
                                      -d description)
     list [event]                     list hooks (all events or one)
@@ -242,6 +246,7 @@ wt hook run <event> [--dry-run]
     enable|disable <event> <hook-id> toggle a hook without removing it
     run <event> [--dry-run]          fire hooks manually
   Examples:
+    wt hook init
     wt hook add worktree.post_create "npm install" -d "install deps"
     wt hook add merge.pre "make test"
     wt hook list merge.pre

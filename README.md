@@ -43,7 +43,7 @@ unless you pass `--any`.
 | Inspection | `doctor`, `diff`, `tree`, `stats` |
 | Stash | `stash save`, `stash list`, `stash apply` |
 | Backup | `backup create`, `backup list`, `backup restore` |
-| Hooks | `hook add/remove/list/enable/disable/run` (12 lifecycle events, `.wtconfig.json`) |
+| Hooks | `hook init/add/remove/list/enable/disable/run` (12 lifecycle events, `.wtconfig.json`) |
 | Config | `config show/set/use-preset/list-presets/reset`, `export`, `import` |
 | Shell integration | `cd`, `init`, `completion <shell>` |
 | AI integration | `llm [command]` (machine-oriented usage docs, see below) |
@@ -86,9 +86,32 @@ wt llm >> CLAUDE.md
 - Sessions: `~/.config/wt/sessions/<branch>/`
 - Backups: `~/.config/wt/backups/`
 - Registry (global mode): `~/.config/wt/registry.json`
-- Per-repo hooks: `<repo>/.wtconfig.json`
+- Per-repo hooks: `<repo>/.wtconfig.json` (scripts conventionally in `<repo>/.wt-hooks/`)
 - Shared files to copy into new worktrees: `<repo>/.wtshare`
 - Env overrides: `WT_AI_TOOL`, `WT_LAUNCH_METHOD`, `WT_NON_INTERACTIVE`
+
+### Hooks
+
+Hooks are shell commands registered per repository and fired at 12
+lifecycle points (`worktree.post_create`, `merge.pre`, …). To get started,
+`wt hook init` writes `.wt-hooks/post-create.sh` from a built-in template
+that detects JS/Python/Go/Rust projects in a new worktree and installs
+their dependencies, and enables it as a `worktree.post_create` hook — live
+immediately, no rename needed. Re-running is safe: an existing script is
+left untouched. (The template ships inside the binary via `go:embed`;
+its source lives at `internal/hooks/templates/post-create.sh`.)
+
+```bash
+wt hook init                                        # install the template
+wt hook add worktree.post_create "npm install"      # or register your own
+wt hook list                                        # see what's registered
+wt hook run worktree.post_create --dry-run          # preview
+```
+
+Hook processes receive `WT_BRANCH`, `WT_BASE_BRANCH`, `WT_WORKTREE_PATH`,
+`WT_REPO_PATH`, `WT_EVENT`, `WT_OPERATION`, `WT_PR_URL` in their
+environment. Pre-hooks abort the operation on failure; post-hooks only
+warn.
 
 ### Shell integration (wt cd + completion)
 

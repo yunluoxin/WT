@@ -33,6 +33,32 @@ func hookCmd() *cobra.Command {
 	}
 
 	var id, description string
+	init := &cobra.Command{
+		Use:   "init",
+		Short: "Install a post-create hook template (auto-installs deps)",
+		Long: "Write .wt-hooks/post-create.sh from the built-in template — it detects JS/Python/Go/Rust " +
+			"projects in a new worktree and installs their dependencies — and register it as an " +
+			"enabled worktree.post_create hook in .wtconfig.json.\n\n" +
+			"The script is live immediately (no rename needed); edit it freely. " +
+			"Re-running is safe: an existing script is left untouched.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repo, err := repoForHooks()
+			if err != nil {
+				return err
+			}
+			scriptPath, hookID, err := hooks.Init(repo)
+			if err != nil {
+				return err
+			}
+			termenv.Success("Installed hook %s\n", hookID)
+			termenv.Info("  script:  %s", scriptPath)
+			termenv.Info("  event:   worktree.post_create [enabled]")
+			termenv.Info("  Try it:  wt new <branch>")
+			return nil
+		},
+	}
+
 	add := &cobra.Command{
 		Use:               "add <event> <command>",
 		Short:             "Register a hook for an event",
@@ -183,6 +209,6 @@ func hookCmd() *cobra.Command {
 	}
 	run.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would run without executing")
 
-	root.AddCommand(add, remove, list, enable, disable, run)
+	root.AddCommand(init, add, remove, list, enable, disable, run)
 	return root
 }
