@@ -1,8 +1,10 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	wterrors "wt/internal/errors"
@@ -117,6 +119,26 @@ func stashPop(dir string) error {
 	return err
 }
 
+// rebaseInProgress reports whether dir is in the middle of a rebase. It checks
+// for the rebase-merge/rebase-apply state directories rather than REBASE_HEAD,
+// which git leaves behind after a rebase completes. Paths are resolved via
+// --git-path so linked worktrees (where .git is a file) are handled.
+func rebaseInProgress(dir string) bool {
+	for _, state := range []string{"rebase-merge", "rebase-apply"} {
+		p, err := git.Output(dir, "rev-parse", "--git-path", state)
+		if err != nil {
+			continue
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(dir, p)
+		}
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
 // doneNoCommits handles the case where the feature branch has no commits of
 // its own: the stashed changes are moved onto the base branch directly.
 func doneNoCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, opts DoneOptions) error {
@@ -186,7 +208,9 @@ func doneNoCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, opts
 
 // doneWithCommits handles the case where the feature branch has new commits:
 // FinishWorktree rebases and fast-forward merges them into the base branch,
-// then the stashed changes are popped onto the base branch.
+// then the stashed changes are popped onto the base branch. The stashed flag
+// reports whether step 1 stashed uncommitted changes that still need to be
+// restored on the base branch.
 func doneWithCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, opts DoneOptions) error {
 	err := FinishWorktree(FinishOptions{
 		Target:  feature,
@@ -194,6 +218,21 @@ func doneWithCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, op
 		Keep:    opts.Keep,
 	})
 	if err != nil {
+		// The AI tool resolved the rebase conflicts and completed the rebase;
+		// it signals this with ErrAborted. `wt done` continues automatically
+		// (rather than stopping for a manual re-run as `wt merge`/`wt sync`
+		// do): re-run FinishWorktree, which now rebases cleanly and merges.
+		// The stashed flag is preserved across the retry so the changes are
+		// still restored afterwards. Guard against the AI not actually
+		// finishing the rebase, which would loop forever.
+		if opts.AI && errors.Is(err, wterrors.ErrAborted) {
+			if rebaseInProgress(cwd) {
+				termenv.Warn("AI session ended but the rebase is still in progress; resolve it and re-run 'wt done'.")
+				return err
+			}
+			termenv.Info("%s", termenv.Cyan("Rebase resolved; continuing merge..."))
+			return doneWithCommits(cwd, mainRepo, feature, baseBranch, stashed, opts)
+		}
 		// The merge did not complete. FinishWorktree aborts a failed rebase
 		// itself; restore the stashed changes here so the worktree is back
 		// to its original state and `wt done` can simply be re-run.

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -229,5 +230,76 @@ func TestDoneBaseInOtherWorktree(t *testing.T) {
 	}
 	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
 		t.Error("worktree not removed after done")
+	}
+}
+
+// With --ai, a rebase conflict resolved by the AI tool should make done
+// continue automatically (no manual re-run): merge completes, the worktree
+// is cleaned up, and the stash is restored on the base branch.
+func TestDoneAIRebaseConflictAutoContinues(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake AI helper is a bash script")
+	}
+	repo := testutil.NewRepo(t)
+	home := sharedHome(t)
+
+	// Fake AI tool: resolves every conflicted file by keeping both sides
+	// (dropping the conflict markers), stages it, and continues the rebase.
+	fakeAI := filepath.Join(home, "fake-ai.sh")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+export GIT_EDITOR=true
+export GIT_SEQUENCE_EDITOR=true
+for f in $(git diff --name-only --diff-filter=U); do
+  grep -v -E '^(<<<<<<<|=======|>>>>>>>)' "$f" > "$f.resolved"
+  mv "$f.resolved" "$f"
+  git add "$f"
+done
+git rebase --continue
+`
+	if err := os.WriteFile(fakeAI, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runHome(t, repo, home, "new", "done-ai", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-ai")
+
+	// Diverge: same file committed on both branches, plus uncommitted work.
+	testutil.WriteFile(t, wtPath, "s.txt", "from feature\n")
+	testutil.Commit(t, wtPath, "feature change")
+	testutil.WriteFile(t, repo, "s.txt", "from main\n")
+	testutil.Commit(t, repo, "main change")
+	testutil.WriteFile(t, wtPath, "wip.txt", "uncommitted\n")
+
+	out, stderr, err := runEnv(t, wtPath, home, []string{"WT_AI_TOOL=" + fakeAI}, "done", "--ai")
+	if err != nil {
+		t.Fatalf("done --ai: %v\n%s\n%s", err, out, stderr)
+	}
+
+	// The rebase was resolved by the fake AI and done continued on its own:
+	// merge completed and the worktree + branch are gone.
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Errorf("worktree not removed after done --ai auto-continue:\n%s\n%s", out, stderr)
+	}
+	if out := testutil.GitOut(t, repo, "branch", "--list", "wt-done-ai"); strings.TrimSpace(out) != "" {
+		t.Error("branch wt-done-ai still exists")
+	}
+	// Feature commit merged into base with both sides kept.
+	data, err := os.ReadFile(filepath.Join(repo, "s.txt"))
+	if err != nil {
+		t.Fatalf("s.txt not merged to main: %v", err)
+	}
+	if !strings.Contains(string(data), "from main") || !strings.Contains(string(data), "from feature") {
+		t.Errorf("resolved s.txt should keep both sides, got:\n%s", data)
+	}
+	// Stash restored on the base branch.
+	if _, err := os.Stat(filepath.Join(repo, "wip.txt")); err != nil {
+		t.Error("stashed change not restored on base after auto-continue")
+	}
+	// Not left mid-rebase.
+	if _, err := os.Stat(filepath.Join(repo, ".git", "REBASE_HEAD")); !os.IsNotExist(err) {
+		t.Error("repository left mid-rebase")
 	}
 }
