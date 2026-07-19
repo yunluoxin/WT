@@ -34,6 +34,16 @@ Layered: `internal/cli` (cobra commands, flags, output formatting) → `internal
 - **termenv/**: TTY-aware colored output. Anything printed to stdout that scripts may capture must bypass the color helpers.
 - **llm command**: `cli/llm.go` contains `llmSpecs` — AI-oriented usage snippets, one per command. When adding/renaming a command or changing flags, update the matching snippet; tests assert every snippet lists its enums and has an Examples section.
 
+## Before every commit (mandatory)
+
+每次修改代码后、commit 之前，必须先在本地完整验证通过，禁止依赖 CI 发现问题：
+
+1. `go build ./...` — 编译必须通过
+2. `go test ./...` — 所有测试必须通过（包括 `e2e/`）
+3. `go vet ./... && gofmt -l .` — gofmt 输出必须为空
+
+任何一项不通过就不允许 commit / push。
+
 ## Conventions
 
 - Version metadata injected via ldflags (`cli.SetVersion`); releases use GoReleaser on `v*` tags (see RELEASING.md).
