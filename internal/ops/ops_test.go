@@ -286,7 +286,8 @@ func TestFinishWorktreeMergesAndCleansUp(t *testing.T) {
 	}
 }
 
-func TestFinishDryRun(t *testing.T) {	testutil.SetHome(t)
+func TestFinishDryRun(t *testing.T) {
+	testutil.SetHome(t)
 	repo := testutil.NewRepo(t)
 	testutil.Chdir(t, repo)
 	wtPath, err := CreateWorktree(CreateOptions{BranchName: "feat-dry", NoTerm: true})

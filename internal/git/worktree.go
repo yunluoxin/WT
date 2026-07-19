@@ -38,7 +38,9 @@ func ParseWorktrees(dir string) ([]Worktree, error) {
 			flush()
 		case strings.HasPrefix(line, "worktree "):
 			flush()
-			cur = &Worktree{Path: strings.TrimPrefix(line, "worktree ")}
+			// git reports paths with forward slashes even on Windows;
+			// normalize so callers can compare against filepath results.
+			cur = &Worktree{Path: filepath.FromSlash(strings.TrimPrefix(line, "worktree "))}
 		case strings.HasPrefix(line, "branch "):
 			if cur != nil {
 				cur.Branch = NormalizeBranchName(strings.TrimPrefix(line, "branch "))
