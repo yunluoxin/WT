@@ -303,3 +303,63 @@ git rebase --continue
 		t.Error("repository left mid-rebase")
 	}
 }
+
+// When the AI session is cancelled (exits non-zero without finishing the
+// rebase), done must abort the unfinished rebase, restore the stash, and fail
+// — leaving the worktree clean so the command can be re-run.
+func TestDoneAICancelledMidRebase(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake AI helper is a bash script")
+	}
+	repo := testutil.NewRepo(t)
+	home := sharedHome(t)
+
+	// Fake AI that gives up immediately without resolving anything (simulates
+	// Ctrl+C / a failed AI session). Exits non-zero.
+	fakeAI := filepath.Join(home, "fake-ai-cancel.sh")
+	if err := os.WriteFile(fakeAI, []byte("#!/usr/bin/env bash\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runHome(t, repo, home, "new", "done-cancel", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-cancel")
+
+	testutil.WriteFile(t, wtPath, "s.txt", "from feature\n")
+	testutil.Commit(t, wtPath, "feature change")
+	testutil.WriteFile(t, repo, "s.txt", "from main\n")
+	testutil.Commit(t, repo, "main change")
+	testutil.WriteFile(t, wtPath, "wip.txt", "uncommitted\n")
+
+	out, stderr, err := runEnv(t, wtPath, home, []string{"WT_AI_TOOL=" + fakeAI}, "done", "--ai")
+	if err == nil {
+		t.Fatalf("expected done to fail when AI is cancelled:\n%s\n%s", out, stderr)
+	}
+
+	// The unfinished rebase is aborted: no conflict markers, not mid-rebase.
+	res, _ := exec.Command("git", "-C", wtPath, "status", "--porcelain").CombinedOutput()
+	if strings.Contains(string(res), "UU") {
+		t.Errorf("rebase not aborted after AI cancel, conflicts remain:\n%s", res)
+	}
+	if out := testutil.GitOut(t, wtPath, "rev-parse", "--git-path", "rebase-merge"); true {
+		p := out
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(wtPath, p)
+		}
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Error("worktree left mid-rebase after AI cancel")
+		}
+	}
+	// Worktree and branch survive for a re-run.
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Error("worktree removed after cancelled AI")
+	}
+	// Stash restored: uncommitted file is back, no stash entry leaked.
+	if _, err := os.Stat(filepath.Join(wtPath, "wip.txt")); err != nil {
+		t.Error("stashed changes not restored after AI cancel")
+	}
+	if out := testutil.GitOut(t, repo, "stash", "list"); strings.Contains(out, "wt done") {
+		t.Errorf("stash entry left behind after restore:\n%s", out)
+	}
+}

@@ -213,9 +213,10 @@ func doneNoCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, opts
 // restored on the base branch.
 func doneWithCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, opts DoneOptions) error {
 	err := FinishWorktree(FinishOptions{
-		Target:  feature,
-		AIMerge: opts.AI,
-		Keep:    opts.Keep,
+		Target:       feature,
+		AIMerge:      opts.AI,
+		Keep:         opts.Keep,
+		AutoResumeAI: true, // done resumes automatically after the AI session
 	})
 	if err != nil {
 		// The AI tool resolved the rebase conflicts and completed the rebase;
@@ -233,9 +234,19 @@ func doneWithCommits(cwd, mainRepo, feature, baseBranch string, stashed bool, op
 			termenv.Info("%s", termenv.Cyan("Rebase resolved; continuing merge..."))
 			return doneWithCommits(cwd, mainRepo, feature, baseBranch, stashed, opts)
 		}
-		// The merge did not complete. FinishWorktree aborts a failed rebase
-		// itself; restore the stashed changes here so the worktree is back
-		// to its original state and `wt done` can simply be re-run.
+		// The merge did not complete. ErrAborted only covers a successful AI
+		// session; reaching here means a plain rebase conflict (no --ai) or an
+		// AI session that was cancelled / failed mid-rebase (a non-zero exit,
+		// which is NOT ErrAborted). FinishWorktree aborts the rebase itself
+		// only on the non-AI path, so if a rebase is still in progress (AI
+		// cancelled before finishing), abort it first to get back to a clean
+		// tree — otherwise restoring the stash would land on conflicted files.
+		if rebaseInProgress(cwd) {
+			termenv.Info("%s", termenv.Yellow("Aborting unfinished rebase..."))
+			_, _ = git.Git(cwd, false, "rebase", "--abort")
+		}
+		// Restore the stashed changes so the worktree is back to its original
+		// state and `wt done` can simply be re-run.
 		if stashed {
 			termenv.Info("%s", termenv.Yellow("Restoring stashed changes in the feature worktree..."))
 			if popErr := stashPop(cwd); popErr != nil {

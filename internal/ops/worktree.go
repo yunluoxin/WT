@@ -190,8 +190,12 @@ type FinishOptions struct {
 	AIMerge     bool
 	Any         bool // allow branches not created by `wt new` (no wt- prefix)
 	Keep        bool // skip worktree/branch cleanup after a successful merge
-	LookupMode  LookupMode
-	Global      bool
+	// AutoResumeAI marks callers (wt done) that automatically continue after
+	// an AI conflict-resolution session, so no "re-run wt merge" hint is
+	// printed. wt merge leaves it false and gets the hint.
+	AutoResumeAI bool
+	LookupMode   LookupMode
+	Global       bool
 }
 
 // FinishWorktree rebases the feature branch, fast-forward merges into the
@@ -294,7 +298,11 @@ func FinishWorktree(opts FinishOptions) error {
 	if _, err := git.Git(cwd, true, "rebase", rebaseTarget); err != nil {
 		conflicts := conflictedFiles(cwd)
 		if len(conflicts) > 0 && opts.AIMerge {
-			return aiResolveConflicts(cwd, feature, rebaseTarget, conflicts, "wt merge")
+			rerun := "wt merge"
+			if opts.AutoResumeAI {
+				rerun = "" // caller resumes automatically; no re-run hint
+			}
+			return aiResolveConflicts(cwd, feature, rebaseTarget, conflicts, rerun)
 		}
 		_, _ = git.Git(cwd, false, "rebase", "--abort")
 		return rebaseError(cwd, rebaseTarget, conflicts, !opts.AIMerge)
@@ -609,8 +617,13 @@ func aiResolveConflicts(worktreePath, branch, rebaseTarget string, conflicts []s
 	}
 
 	termenv.Info("\n%s", termenv.Yellow("AI conflict resolution completed."))
-	termenv.Info("%s\n", termenv.Yellow("Verify the resolution and re-run if needed."))
-	termenv.Info("Re-run: %s to continue\n", termenv.Cyan(rerunCmd))
+	// A non-empty rerunCmd means the caller stops and asks the user to re-run
+	// (wt merge / wt sync). Callers that resume automatically (wt done) pass
+	// an empty rerunCmd and skip the hint.
+	if rerunCmd != "" {
+		termenv.Info("%s\n", termenv.Yellow("Verify the resolution and re-run if needed."))
+		termenv.Info("Re-run: %s to continue\n", termenv.Cyan(rerunCmd))
+	}
 	return wterrors.New(wterrors.ErrAborted, "AI conflict resolution finished; re-run the command")
 }
 
