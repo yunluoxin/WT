@@ -21,11 +21,13 @@ const initEvent = "worktree.post_create"
 const InitCommand = "sh " + InitScriptRel
 
 // initDescription describes the installed hook in `wt hook list` output.
-const initDescription = "auto-install deps for JS/Python/Go/Rust projects"
+const initDescription = "auto-install deps (JS/Python/Go/Rust/Swift/Pods/Gradle/Flutter/Ruby/PHP/.NET/Maven)"
 
 // postCreateTemplate is the hook script installed by `wt hook init`.
-// It scans the new worktree for JS/Python/Go/Rust projects and installs
-// their dependencies. Keep it dependency-light: POSIX sh only.
+// It scans the new worktree for common project types (JS, Python, Go,
+// Rust, Swift/SPM, CocoaPods, Gradle, Flutter/Dart, Ruby, PHP, .NET,
+// Maven) and installs their dependencies. Keep it dependency-light:
+// POSIX sh only.
 //
 //go:embed templates/post-create.sh
 var postCreateTemplate string

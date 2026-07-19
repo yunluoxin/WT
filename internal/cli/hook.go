@@ -36,8 +36,9 @@ func hookCmd() *cobra.Command {
 	init := &cobra.Command{
 		Use:   "init",
 		Short: "Install a post-create hook template (auto-installs deps)",
-		Long: "Write .wt-hooks/post-create.sh from the built-in template — it detects JS/Python/Go/Rust " +
-			"projects in a new worktree and installs their dependencies — and register it as an " +
+		Long: "Write .wt-hooks/post-create.sh from the built-in template — it detects common project " +
+			"types (JS, Python, Go, Rust, Swift/SPM, CocoaPods, Gradle, Flutter/Dart, Ruby, PHP, " +
+			".NET, Maven) in a new worktree and installs their dependencies — and register it as an " +
 			"enabled worktree.post_create hook in .wtconfig.json.\n\n" +
 			"The script is live immediately (no rename needed); edit it freely. " +
 			"Re-running is safe: an existing script is left untouched.",

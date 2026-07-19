@@ -36,6 +36,26 @@ func TestInitCreatesScriptAndRegistersHook(t *testing.T) {
 	if !strings.Contains(string(data), `not -path "*/node_modules/*"`) {
 		t.Error("script must skip package.json under node_modules")
 	}
+
+	// The template must handle every ecosystem it advertises.
+	for _, marker := range []string{
+		"package.json", "pnpm install --frozen-lockfile", // JS
+		"pyproject.toml", "uv sync --locked", // Python
+		"go.mod", "go mod download", // Go
+		"Cargo.toml", "cargo fetch --locked", // Rust
+		"Package.swift", "swift package resolve", // SPM
+		"Podfile", "install --deployment", "bundle exec pod", // CocoaPods
+		"build.gradle", "gradlew", // Gradle / Android
+		"pubspec.yaml", "pub get", // Flutter / Dart
+		"Gemfile", "bundle install", // Ruby
+		"composer.json", "composer install", // PHP
+		".csproj", "dotnet restore", // .NET
+		"pom.xml", "mvn", // Maven
+	} {
+		if !strings.Contains(string(data), marker) {
+			t.Errorf("template missing ecosystem marker %q", marker)
+		}
+	}
 	if runtime.GOOS != "windows" {
 		info, err := os.Stat(scriptPath)
 		if err != nil {

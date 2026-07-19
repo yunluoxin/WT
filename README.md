@@ -95,11 +95,15 @@ wt llm >> CLAUDE.md
 Hooks are shell commands registered per repository and fired at 12
 lifecycle points (`worktree.post_create`, `merge.pre`, …). To get started,
 `wt hook init` writes `.wt-hooks/post-create.sh` from a built-in template
-that detects JS/Python/Go/Rust projects in a new worktree and installs
-their dependencies, and enables it as a `worktree.post_create` hook — live
-immediately, no rename needed. Re-running is safe: an existing script is
-left untouched. (The template ships inside the binary via `go:embed`;
-its source lives at `internal/hooks/templates/post-create.sh`.)
+that detects common project types — JS (npm/pnpm/yarn/bun), Python
+(poetry/uv/pipenv/venv), Go, Rust, Swift/SPM, CocoaPods, Gradle (Android
+/JVM), Flutter/Dart, Ruby, PHP, .NET, Maven — and installs their
+dependencies (frozen/locked modes where the tool supports them, skipping
+projects that declare no dependencies), and enables it as a
+`worktree.post_create` hook — live immediately, no rename needed.
+Re-running is safe: an existing script is left untouched. (The template
+ships inside the binary via `go:embed`; its source lives at
+`internal/hooks/templates/post-create.sh`.)
 
 ```bash
 wt hook init                                        # install the template

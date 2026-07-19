@@ -237,8 +237,10 @@ wt hook run <event> [--dry-run]
   An unknown event fails with: unknown hook event "<name>".
   Subcommands:
     init                             install .wt-hooks/post-create.sh (auto-
-                                     installs JS/Python/Go/Rust deps) and
-                                     enable it; idempotent, never overwrites
+                                     installs deps for JS, Python, Go, Rust,
+                                     Swift/SPM, CocoaPods, Gradle, Flutter,
+                                     Ruby, PHP, .NET, Maven) and enable it;
+                                     idempotent, never overwrites
     add <event> <command>            register a hook (--id custom id,
                                      -d description)
     list [event]                     list hooks (all events or one)
