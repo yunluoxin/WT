@@ -31,6 +31,11 @@ shasum -a 256 -c checksums.txt --ignore-missing
 Windows: download `wt_*_windows_<arch>.zip`, unzip, and add the folder
 containing `wt.exe` to your `PATH`.
 
+> **Windows caveat:** the Windows build compiles and ships, but it is not
+> covered by CI and may misbehave — git for Windows differs in corner cases
+> (e.g. stash handling across worktrees). macOS and Linux are the tested
+> platforms.
+
 Note: `releases/latest/download/<asset>` URLs pin the exact version in
 the asset name, so replace `1.0.0` in the filename with the version
 shown on the releases page when a newer one exists (the version inside
