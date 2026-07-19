@@ -12,8 +12,27 @@ echo "🛠  wt post-create hook running in: $ROOT"
 # Frozen modes never touch the lockfile; if the lockfile is out of sync
 # with the manifest we warn and fall back to a normal install so one
 # stale lockfile doesn't block the rest of the worktree setup.
+
+# has_js_deps reports whether package.json declares any third-party deps.
+# Projects without dependencies (e.g. a bare Chrome extension) would get a
+# useless empty node_modules/ and a newly created lockfile — skip those.
+has_js_deps() {
+  # No node to parse JSON? Assume deps exist (conservative: still install).
+  command -v node >/dev/null 2>&1 || return 0
+  node -e '
+    const p = require("./package.json");
+    const deps = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
+      .some((k) => p[k] && Object.keys(p[k]).length > 0);
+    process.exit(deps ? 0 : 1);
+  ' 2>/dev/null
+}
+
 install_js() {
   cd "$1"
+  if ! has_js_deps; then
+    echo "⏭️   [js] package.json has no dependencies; skipping install"
+    return 0
+  fi
   if [ -f "pnpm-lock.yaml" ] && command -v pnpm >/dev/null 2>&1; then
     echo "📦  [js] pnpm install --frozen-lockfile (pnpm-lock.yaml found)"
     pnpm install --frozen-lockfile || {
