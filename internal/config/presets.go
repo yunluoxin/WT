@@ -52,8 +52,10 @@ var MergePresets = map[string]MergePreset{
 	// skips the workspace-trust prompt that only appears in headless mode and
 	// would otherwise block the run; --force auto-allows the shell commands
 	// the agent runs to resolve conflicts.
-	"cursor-agent":      {Flags: []string{"--print", "--trust", "--force"}},
-	"cursor-agent-yolo": {Flags: []string{"--print", "--trust", "--force"}},
+	"cursor-agent": {Flags: []string{"--print", "--trust", "--force"}},
+	// The yolo launch command already carries --force; reset the base so the
+	// merge invocation is not "--force --print --trust --force".
+	"cursor-agent-yolo": {BaseOverride: []string{"cursor-agent"}, Flags: []string{"--print", "--trust", "--force"}},
 }
 
 // FindPreset returns the preset by name.

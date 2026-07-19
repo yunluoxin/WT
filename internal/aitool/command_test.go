@@ -91,6 +91,53 @@ func TestMergeCommandRemoteStripsFlag(t *testing.T) {
 	}
 }
 
+// WT_AI_TOOL set to a preset NAME expands to that preset's command, so the
+// preset resume/merge variants apply (e.g. cursor-agent-yolo --force and its
+// --print --trust --force merge invocation).
+func TestEnvPresetNameExpands(t *testing.T) {
+	testutil.SetHome(t)
+	t.Setenv("WT_AI_TOOL", "cursor-agent-yolo")
+	cfg := loadCfg(t)
+
+	if got := EffectiveCommand(cfg); !equal(got, []string{"cursor-agent", "--force"}) {
+		t.Errorf("EffectiveCommand = %v, want [cursor-agent --force]", got)
+	}
+	if got := ResumeCommand(cfg); !equal(got, []string{"cursor-agent", "--force", "resume"}) {
+		t.Errorf("ResumeCommand = %v, want [cursor-agent --force resume]", got)
+	}
+	got := MergeCommand(cfg, "fix conflicts")
+	want := []string{"cursor-agent", "--print", "--trust", "--force", "fix conflicts"}
+	if !equal(got, want) {
+		t.Errorf("MergeCommand = %v, want %v", got, want)
+	}
+}
+
+// A preset name that is also a plain command (claude) still expands via the
+// preset table, picking up the merge flags.
+func TestEnvPresetNameClaude(t *testing.T) {
+	testutil.SetHome(t)
+	t.Setenv("WT_AI_TOOL", "claude")
+	cfg := loadCfg(t)
+	got := MergeCommand(cfg, "fix")
+	want := []string{"claude", "--print", "--tools=default", "fix"}
+	if !equal(got, want) {
+		t.Errorf("MergeCommand = %v, want %v", got, want)
+	}
+}
+
+// A non-preset WT_AI_TOOL value is still split verbatim and does not gain
+// preset merge flags.
+func TestEnvNonPresetUnchanged(t *testing.T) {
+	testutil.SetHome(t)
+	t.Setenv("WT_AI_TOOL", "myai --fast")
+	cfg := loadCfg(t)
+	got := MergeCommand(cfg, "fix")
+	want := []string{"myai", "--fast", "fix"}
+	if !equal(got, want) {
+		t.Errorf("MergeCommand = %v, want %v", got, want)
+	}
+}
+
 func TestIsClaudeTool(t *testing.T) {
 	testutil.SetHome(t)
 	unsetEnv(t, "WT_AI_TOOL")

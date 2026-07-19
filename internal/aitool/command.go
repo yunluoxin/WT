@@ -9,11 +9,27 @@ import (
 	"wt/internal/config"
 )
 
+// envCommand resolves the WT_AI_TOOL env override to argv. If the value
+// matches a preset name (e.g. "cursor-agent-yolo"), it expands to that
+// preset's command so the resume/merge variants apply; otherwise the value
+// is split into argv verbatim. Returns nil when WT_AI_TOOL is not set;
+// returns an empty slice when it is set but empty (AI disabled).
+func envCommand() []string {
+	v, ok := os.LookupEnv("WT_AI_TOOL")
+	if !ok {
+		return nil
+	}
+	if p, found := config.FindPreset(strings.TrimSpace(v)); found {
+		return append([]string{}, p.Command...)
+	}
+	return splitCommand(v)
+}
+
 // EffectiveCommand returns the configured AI tool command as argv.
 // Priority: WT_AI_TOOL env (empty = no-op) > config ai_tool.command+args.
 func EffectiveCommand(cfg map[string]any) []string {
-	if v, ok := os.LookupEnv("WT_AI_TOOL"); ok {
-		return splitCommand(v)
+	if env := envCommand(); env != nil {
+		return env
 	}
 	cmd := config.GetString(cfg, "ai_tool.command")
 	args := stringSlice(config.Get(cfg, "ai_tool.args"))
@@ -25,12 +41,16 @@ func EffectiveCommand(cfg map[string]any) []string {
 
 // ResumeCommand returns the command used to resume an existing session.
 func ResumeCommand(cfg map[string]any) []string {
-	if v, ok := os.LookupEnv("WT_AI_TOOL"); ok {
-		base := splitCommand(v)
-		if len(base) == 0 {
-			return base
+	if env := envCommand(); env != nil {
+		if len(env) == 0 {
+			return env
 		}
-		return append(base, "--resume")
+		if preset := config.PresetNameForCommand(env); preset != "" {
+			if resume, ok := config.ResumePresets[preset]; ok {
+				return resume
+			}
+		}
+		return append(env, "--resume")
 	}
 	base := EffectiveCommand(cfg)
 	if len(base) == 0 {
@@ -47,10 +67,18 @@ func ResumeCommand(cfg map[string]any) []string {
 // MergeCommand builds the command used for --ai conflict resolution,
 // with the prompt appended at the end.
 func MergeCommand(cfg map[string]any, prompt string) []string {
-	if v, ok := os.LookupEnv("WT_AI_TOOL"); ok {
-		base := splitCommand(v)
-		if len(base) == 0 {
-			return base
+	if env := envCommand(); env != nil {
+		if len(env) == 0 {
+			return env
+		}
+		base := env
+		if preset := config.PresetNameForCommand(env); preset != "" {
+			if mp, ok := config.MergePresets[preset]; ok {
+				if len(mp.BaseOverride) > 0 {
+					base = append([]string{}, mp.BaseOverride...)
+				}
+				base = append(base, mp.Flags...)
+			}
 		}
 		return append(base, prompt)
 	}
