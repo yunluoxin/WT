@@ -46,6 +46,26 @@ unless you pass `--any`.
 | Hooks | `hook add/remove/list/enable/disable/run` (12 lifecycle events, `.wtconfig.json`) |
 | Config | `config show/set/use-preset/list-presets/reset`, `export`, `import` |
 | Shell integration | `cd`, `init`, `completion <shell>` |
+| AI integration | `llm [command]` (machine-oriented usage docs, see below) |
+
+### AI agent integration (`wt llm`)
+
+`wt llm` prints usage instructions written for AI coding agents (Claude
+Code, Codex, …) — exact syntax, fixed enum values (hook events, launch
+methods, presets), concrete examples, and non-interactive usage notes.
+Output is plain text on stdout with no side effects, safe to capture.
+
+```bash
+wt llm          # full instruction block for every command
+wt llm merge    # just one command
+```
+
+Feed it into your agent's context so it can drive wt directly:
+
+```bash
+# e.g. append to CLAUDE.md / AGENTS.md, or paste into a system prompt
+wt llm >> CLAUDE.md
+```
 
 ### AI tool presets
 
