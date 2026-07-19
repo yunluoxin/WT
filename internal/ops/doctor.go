@@ -146,7 +146,7 @@ func Doctor() error {
 		for _, c := range conflicted {
 			termenv.Info("      • %s: %d conflicted file(s)", c.branch, len(c.files))
 		}
-		termenv.Info("   %s", termenv.Dim("Tip: Use 'wt sync --ai-merge' for AI-assisted resolution"))
+		termenv.Info("   %s", termenv.Dim("Tip: Use 'wt sync --ai' for AI-assisted resolution"))
 		issues++
 	} else {
 		termenv.Info("   %s No merge conflicts detected", termenv.Green("*"))
@@ -186,7 +186,7 @@ func Doctor() error {
 	if len(conflicted) > 0 {
 		header()
 		termenv.Info("  • Resolve conflicts in conflicted worktrees")
-		termenv.Info("  • Use %s for AI assistance", termenv.Cyan("wt sync --ai-merge"))
+		termenv.Info("  • Use %s for AI assistance", termenv.Cyan("wt sync --ai"))
 	}
 	if printedHeader {
 		fmt.Println()

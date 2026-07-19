@@ -29,7 +29,7 @@ var ResumePresets = map[string][]string{
 	"codex-yolo":         {"codex", "resume", "--dangerously-bypass-approvals-and-sandbox", "--last"},
 }
 
-// MergePreset describes how to invoke the AI tool for --ai-merge.
+// MergePreset describes how to invoke the AI tool for --ai conflict resolution.
 type MergePreset struct {
 	BaseOverride []string // replaces the base command when non-empty
 	Flags        []string // appended after the base command

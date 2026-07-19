@@ -202,7 +202,7 @@ func syncOne(item syncItem, repo string, fetchOK bool, opts SyncOptions) error {
 
 func rerunHint(all bool) string {
 	if all {
-		return "wt sync --all --ai-merge"
+		return "wt sync --all --ai"
 	}
 	return "wt sync"
 }

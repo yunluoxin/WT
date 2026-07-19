@@ -44,7 +44,7 @@ func ResumeCommand(cfg map[string]any) []string {
 	return append(base, "--resume")
 }
 
-// MergeCommand builds the command used for --ai-merge conflict resolution,
+// MergeCommand builds the command used for --ai conflict resolution,
 // with the prompt appended at the end.
 func MergeCommand(cfg map[string]any, prompt string) []string {
 	if v, ok := os.LookupEnv("WT_AI_TOOL"); ok {

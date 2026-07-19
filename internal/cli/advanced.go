@@ -7,7 +7,7 @@ import (
 )
 
 func syncCmd() *cobra.Command {
-	var all, fetchOnly, aiMerge bool
+	var all, fetchOnly, ai bool
 	var tf targetFlags
 	cmd := &cobra.Command{
 		Use:   "sync [target]",
@@ -21,7 +21,7 @@ func syncCmd() *cobra.Command {
 				Target:     firstArg(args),
 				All:        all,
 				FetchOnly:  fetchOnly,
-				AIMerge:    aiMerge,
+				AIMerge:    ai,
 				LookupMode: tf.mode(),
 				Global:     globalMode,
 			})
@@ -29,7 +29,7 @@ func syncCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Sync all worktrees (topological order)")
 	cmd.Flags().BoolVar(&fetchOnly, "fetch-only", false, "Only fetch updates without rebasing")
-	cmd.Flags().BoolVar(&aiMerge, "ai-merge", false, "Launch AI tool to resolve rebase conflicts")
+	cmd.Flags().BoolVar(&ai, "ai", false, "Launch AI tool to resolve rebase conflicts")
 	tf.add(cmd)
 	return cmd
 }
