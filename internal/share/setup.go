@@ -69,6 +69,14 @@ func PromptSetup() {
 	if termenv.IsNonInteractive() {
 		return
 	}
+	// Never prompt when stdout isn't a terminal. `source <(wt completion zsh)`
+	// and `cd "$(wt cd ...)"` keep stdin as a TTY, so the stdin check alone
+	// lets the prompt fire during shell startup — hijacking the terminal for
+	// a question the user never asked for. This check also makes the earlier
+	// stdin check redundant, but IsNonInteractive() covers CI too.
+	if !termenv.IsTTY() {
+		return
+	}
 	if HasFile(repo) {
 		if !isPrompted(repo) {
 			markPrompted(repo)
