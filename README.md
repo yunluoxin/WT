@@ -98,7 +98,8 @@ wt llm >> CLAUDE.md
 ### AI tool presets
 
 `wt config use-preset <name>`: `claude` (default), `claude-yolo`,
-`claude-remote`, `claude-yolo-remote`, `codex`, `codex-yolo`, `no-op`.
+`claude-remote`, `claude-yolo-remote`, `codex`, `codex-yolo`,
+`cursor-agent`, `cursor-agent-yolo`, `no-op`.
 
 ### Launch methods (`--term`)
 

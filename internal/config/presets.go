@@ -16,6 +16,8 @@ var AIToolPresets = []Preset{
 	{Name: "claude-yolo-remote", Command: []string{"claude", "--dangerously-skip-permissions", "/remote-control"}, Description: "Claude Code remote + skip permissions"},
 	{Name: "codex", Command: []string{"codex"}, Description: "OpenAI Codex"},
 	{Name: "codex-yolo", Command: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}, Description: "Codex, bypass approvals and sandbox"},
+	{Name: "cursor-agent", Command: []string{"cursor-agent"}, Description: "Cursor Agent CLI"},
+	{Name: "cursor-agent-yolo", Command: []string{"cursor-agent", "--force"}, Description: "Cursor Agent, auto-allow commands"},
 }
 
 // ResumePresets maps preset name -> resume command.
@@ -27,6 +29,8 @@ var ResumePresets = map[string][]string{
 	"claude-yolo-remote": {"claude", "--dangerously-skip-permissions", "--continue", "/remote-control"},
 	"codex":              {"codex", "resume", "--last"},
 	"codex-yolo":         {"codex", "resume", "--dangerously-bypass-approvals-and-sandbox", "--last"},
+	"cursor-agent":       {"cursor-agent", "resume"},
+	"cursor-agent-yolo":  {"cursor-agent", "--force", "resume"},
 }
 
 // MergePreset describes how to invoke the AI tool for --ai conflict resolution.
@@ -44,6 +48,12 @@ var MergePresets = map[string]MergePreset{
 	"claude-yolo-remote": {BaseOverride: []string{"claude", "--dangerously-skip-permissions"}, Flags: []string{"--print", "--tools=default"}},
 	"codex":              {Flags: []string{"--non-interactive"}},
 	"codex-yolo":         {Flags: []string{"--non-interactive"}},
+	// cursor-agent: --print is headless (no TUI, prints and exits). --trust
+	// skips the workspace-trust prompt that only appears in headless mode and
+	// would otherwise block the run; --force auto-allows the shell commands
+	// the agent runs to resolve conflicts.
+	"cursor-agent":      {Flags: []string{"--print", "--trust", "--force"}},
+	"cursor-agent-yolo": {Flags: []string{"--print", "--trust", "--force"}},
 }
 
 // FindPreset returns the preset by name.

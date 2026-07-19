@@ -309,6 +309,8 @@ Two ways:
        claude-yolo-remote   claude --dangerously-skip-permissions /remote-control
        codex                codex                                     OpenAI Codex
        codex-yolo           codex --dangerously-bypass-approvals-and-sandbox
+       cursor-agent         cursor-agent                              Cursor Agent CLI
+       cursor-agent-yolo    cursor-agent --force
      Unknown names fail with: unknown preset "<name>".
 
 === All 'wt config set' keys ===

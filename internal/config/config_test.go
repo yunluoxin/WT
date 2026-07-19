@@ -177,6 +177,25 @@ func TestResumeAndMergePresets(t *testing.T) {
 	if len(mp.BaseOverride) != 1 || mp.BaseOverride[0] != "claude" {
 		t.Errorf("claude-remote merge base override wrong: %v", mp.BaseOverride)
 	}
+
+	// cursor-agent presets.
+	if got := ResumePresets["cursor-agent"]; len(got) != 2 || got[0] != "cursor-agent" || got[1] != "resume" {
+		t.Errorf("cursor-agent resume preset wrong: %v", got)
+	}
+	cmp := MergePresets["cursor-agent"]
+	want := []string{"--print", "--trust", "--force"}
+	if len(cmp.Flags) != len(want) {
+		t.Fatalf("cursor-agent merge flags wrong: %v", cmp.Flags)
+	}
+	for i, f := range want {
+		if cmp.Flags[i] != f {
+			t.Errorf("cursor-agent merge flags = %v, want %v", cmp.Flags, want)
+			break
+		}
+	}
+	if got := PresetNameForCommand([]string{"cursor-agent"}); got != "cursor-agent" {
+		t.Errorf("PresetNameForCommand(cursor-agent) = %q", got)
+	}
 }
 
 func TestAutoResume(t *testing.T) {
