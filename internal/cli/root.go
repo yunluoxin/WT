@@ -56,9 +56,13 @@ func NewRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Skip side effects for internal commands.
+			// Skip side effects for internal commands and commands whose
+			// output is captured (llm prints AI-oriented instructions).
 			switch cmd.Name() {
-			case "_path", "cd", "init", "completion":
+			case "_path", "cd", "init", "completion", "llm":
+				return
+			}
+			if cmd.Parent() != nil && cmd.Parent().Name() == "llm" {
 				return
 			}
 			share.PromptSetup()
@@ -79,7 +83,7 @@ func NewRootCmd() *cobra.Command {
 		syncCmd(), cleanCmd(), changeBaseCmd(), doctorCmd(), diffCmd(),
 		treeCmd(), statsCmd(), stashCmd(), exportCmd(), importCmd(),
 		backupCmd(), hookCmd(), scanCmd(), pruneCmd(),
-		pathCmd(), cdCmd(), initCmd(),
+		pathCmd(), cdCmd(), initCmd(), llmCmd(),
 	)
 	return root
 }
