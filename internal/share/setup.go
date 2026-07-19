@@ -78,33 +78,38 @@ func PromptSetup() {
 	if isPrompted(repo) {
 		return
 	}
+	// All prompt output goes to stderr, never stdout: commands whose stdout
+	// is captured by the shell (`source <(wt completion zsh)`,
+	// `cd "$(wt cd ...)"`) still have a TTY on stdin, so a prompt here would
+	// otherwise be parsed as shell code / paths.
+	out := os.Stderr
 	detected := DetectCommonFiles(repo)
-	fmt.Println()
-	fmt.Println(termenv.Bold(termenv.Cyan("💡 .wtshare File Setup")))
-	fmt.Println()
-	fmt.Printf("Would you like to create a %s file?\n", termenv.Cyan(".wtshare"))
-	fmt.Println("This lets you automatically copy files to new worktrees (like .env, configs).")
-	fmt.Println()
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, termenv.Bold(termenv.Cyan("💡 .wtshare File Setup")))
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "Would you like to create a %s file?\n", termenv.Cyan(".wtshare"))
+	fmt.Fprintln(out, "This lets you automatically copy files to new worktrees (like .env, configs).")
+	fmt.Fprintln(out)
 	if len(detected) > 0 {
-		fmt.Println(termenv.Bold("Detected files that you might want to share:"))
+		fmt.Fprintln(out, termenv.Bold("Detected files that you might want to share:"))
 		for _, f := range detected {
-			fmt.Printf("  %s %s\n", termenv.Dim("•"), f)
+			fmt.Fprintf(out, "  %s %s\n", termenv.Dim("•"), f)
 		}
-		fmt.Println()
+		fmt.Fprintln(out)
 	}
 	ok := termenv.Confirm("Create .wtshare file?", true)
 	markPrompted(repo)
 	if ok {
 		if err := CreateTemplate(repo, detected); err == nil {
-			termenv.Success("Created %s", filepath.Join(repo, FileName))
-			fmt.Println()
-			fmt.Println(termenv.Bold("Next steps:"))
-			fmt.Println("  1. Review and edit .wtshare to uncomment files you want to share")
-			fmt.Printf("  2. Add to git: %s\n", termenv.Cyan("git add .wtshare && git commit"))
-			fmt.Printf("  3. Files will be copied when you run: %s\n\n", termenv.Cyan("wt new <branch>"))
+			fmt.Fprintf(out, "Created %s\n", filepath.Join(repo, FileName))
+			fmt.Fprintln(out)
+			fmt.Fprintln(out, termenv.Bold("Next steps:"))
+			fmt.Fprintln(out, "  1. Review and edit .wtshare to uncomment files you want to share")
+			fmt.Fprintf(out, "  2. Add to git: %s\n", termenv.Cyan("git add .wtshare && git commit"))
+			fmt.Fprintf(out, "  3. Files will be copied when you run: %s\n\n", termenv.Cyan("wt new <branch>"))
 		}
 	} else {
-		fmt.Println(termenv.Dim("\nYou can create .wtshare manually anytime."))
-		fmt.Println()
+		fmt.Fprintln(out, termenv.Dim("\nYou can create .wtshare manually anytime."))
+		fmt.Fprintln(out)
 	}
 }

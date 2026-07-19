@@ -102,7 +102,7 @@ func Confirm(prompt string, defaultYes bool) bool {
 	if defaultYes {
 		hint = "[Y/n]"
 	}
-	fmt.Printf("%s %s ", prompt, hint)
+	fmt.Fprintf(os.Stderr, "%s %s ", prompt, hint)
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil && line == "" {
@@ -123,7 +123,7 @@ func ConfirmExact(prompt, expected string) bool {
 	if IsNonInteractive() {
 		return false
 	}
-	fmt.Printf("%s (type %q to confirm): ", prompt, expected)
+	fmt.Fprintf(os.Stderr, "%s (type %q to confirm): ", prompt, expected)
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil {
