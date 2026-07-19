@@ -77,6 +77,13 @@ func ClaudeNativeSessionExists(path string) bool {
 		abs = path
 	}
 	encoded := EncodeClaudeProjectPath(abs)
+	// Claude encodes the path as given (e.g. "/tmp/x" → "-tmp-x"), but the
+	// absolute form on this platform may differ ("C:\tmp\x" → "C--tmp-x").
+	// Consider both so lookups succeed regardless of which form was used.
+	encodedAlt := EncodeClaudeProjectPath(path)
+	if encodedAlt == encoded {
+		encodedAlt = ""
+	}
 	projectsDir := filepath.Join(claudeDir(), "projects")
 
 	hasJSONL := func(dir string) bool {
@@ -88,16 +95,30 @@ func ClaudeNativeSessionExists(path string) bool {
 		if hasJSONL(filepath.Join(projectsDir, encoded)) {
 			return true
 		}
+		if encodedAlt != "" && len(encodedAlt) <= 255 &&
+			hasJSONL(filepath.Join(projectsDir, encodedAlt)) {
+			return true
+		}
 	}
+	prefixes := []string{}
 	if len(encoded) > ClaudeSessionPrefixLength {
-		prefix := encoded[:ClaudeSessionPrefixLength]
+		prefixes = append(prefixes, encoded[:ClaudeSessionPrefixLength])
+	}
+	if encodedAlt != "" && len(encodedAlt) > ClaudeSessionPrefixLength {
+		prefixes = append(prefixes, encodedAlt[:ClaudeSessionPrefixLength])
+	}
+	if len(prefixes) > 0 {
 		entries, err := os.ReadDir(projectsDir)
 		if err != nil {
 			return false
 		}
 		for _, e := range entries {
-			if e.IsDir() && strings.HasPrefix(e.Name(), prefix) {
-				if hasJSONL(filepath.Join(projectsDir, e.Name())) {
+			if !e.IsDir() {
+				continue
+			}
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(e.Name(), prefix) &&
+					hasJSONL(filepath.Join(projectsDir, e.Name())) {
 					return true
 				}
 			}

@@ -62,6 +62,7 @@ func runEnv(t *testing.T, dir, home string, extra []string, args ...string) (str
 	env := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + home,
+		"USERPROFILE=" + home, // os.UserHomeDir reads this on Windows
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 		"WT_NON_INTERACTIVE=1",
 		"GIT_TERMINAL_PROMPT=0",
@@ -208,6 +209,7 @@ func TestConfigWorkflow(t *testing.T) {
 		cmd.Env = []string{
 			"PATH=" + os.Getenv("PATH"),
 			"HOME=" + home,
+			"USERPROFILE=" + home, // os.UserHomeDir reads this on Windows
 			"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 			"WT_NON_INTERACTIVE=1",
 		}
@@ -400,6 +402,7 @@ func TestInitCommand(t *testing.T) {
 		cmd.Env = []string{
 			"PATH=" + os.Getenv("PATH"),
 			"HOME=" + home,
+			"USERPROFILE=" + home, // os.UserHomeDir reads this on Windows
 			"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 			"WT_NON_INTERACTIVE=1",
 		}
