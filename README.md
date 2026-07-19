@@ -10,12 +10,39 @@ runtime dependencies.
 
 ## Install
 
+### Prebuilt binaries
+
+Download an archive for your platform from the
+[latest release](https://github.com/yunluoxin/WT/releases/latest),
+extract it, and put `wt` on your `PATH`:
+
 ```bash
-# From source
-cd go && go install ./cmd/wt
+# macOS (Apple Silicon) — swap darwin_arm64 for your platform:
+#   darwin_amd64 | linux_amd64 | linux_arm64 | windows_amd64 | windows_arm64
+curl -LO https://github.com/yunluoxin/WT/releases/latest/download/wt_1.0.0_darwin_arm64.tar.gz
+tar xzf wt_1.0.0_darwin_arm64.tar.gz
+sudo install wt /usr/local/bin/      # or any directory on your PATH
+
+# Verify the download against the published checksums
+curl -LO https://github.com/yunluoxin/WT/releases/latest/download/checksums.txt
+shasum -a 256 -c checksums.txt --ignore-missing
+```
+
+Windows: download `wt_*_windows_<arch>.zip`, unzip, and add the folder
+containing `wt.exe` to your `PATH`.
+
+Note: `releases/latest/download/<asset>` URLs pin the exact version in
+the asset name, so replace `1.0.0` in the filename with the version
+shown on the releases page when a newer one exists (the version inside
+the archive name always matches the tag).
+
+### From source
+
+```bash
+go install ./cmd/wt
 
 # Or build locally
-cd go && go build -o wt ./cmd/wt
+go build -o wt ./cmd/wt
 ```
 
 ## Quick start
@@ -162,7 +189,6 @@ for every `wt` subcommand.
 ## Development
 
 ```bash
-cd go
 go build ./...
 go test ./... -race
 ```
