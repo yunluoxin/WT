@@ -79,6 +79,7 @@ func NewRootCmd() *cobra.Command {
 
 	root.AddCommand(
 		newCmd(), listCmd(), statusCmd(), deleteCmd(), mergeCmd(), finishCmd(),
+		doneCmd(),
 		prCmd(), resumeCmd(), shellCmd(), configCmd(),
 		syncCmd(), cleanCmd(), changeBaseCmd(), doctorCmd(), diffCmd(),
 		treeCmd(), statsCmd(), stashCmd(), exportCmd(), importCmd(),

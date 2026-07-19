@@ -189,6 +189,7 @@ type FinishOptions struct {
 	DryRun      bool
 	AIMerge     bool
 	Any         bool // allow branches not created by `wt new` (no wt- prefix)
+	Keep        bool // skip worktree/branch cleanup after a successful merge
 	LookupMode  LookupMode
 	Global      bool
 }
@@ -285,13 +286,9 @@ func FinishWorktree(opts FinishOptions) error {
 		return nil
 	}
 
-	fetchRes, _ := git.Git(repo, false, "fetch", "--all", "--prune")
+	// Merging always targets the local base branch; remote state (origin/<base>)
+	// is irrelevant here. 'wt sync' is the command that chases remote updates.
 	rebaseTarget := baseBranch
-	if fetchRes.ExitCode == 0 {
-		if res, _ := git.Git(cwd, false, "rev-parse", "--verify", "origin/"+baseBranch); res.ExitCode == 0 {
-			rebaseTarget = "origin/" + baseBranch
-		}
-	}
 
 	termenv.Info("%s", termenv.Yellow(fmt.Sprintf("Rebasing %s onto %s...", feature, rebaseTarget)))
 	if _, err := git.Git(cwd, true, "rebase", rebaseTarget); err != nil {
@@ -317,17 +314,33 @@ func FinishWorktree(opts FinishOptions) error {
 	}
 
 	termenv.Info("%s", termenv.Yellow(fmt.Sprintf("Merging %s into %s...", feature, baseBranch)))
-	_, _ = git.Git(basePath, false, "fetch", "--all", "--prune")
 
-	if cur, err := git.CurrentBranch(basePath); err != nil || cur != baseBranch {
-		termenv.Info("Switching base worktree to '%s'", baseBranch)
-		if _, err := git.Git(basePath, true, "switch", baseBranch); err != nil {
-			return err
-		}
+	// Merge in the worktree where the base branch is actually checked out.
+	// If another worktree already has it checked out, merge there instead of
+	// forcing basePath onto the base branch (which git would reject).
+	mergePath := basePath
+	if wt, found, err := git.FindWorktreeByBranch(repo, baseBranch); err == nil && found {
+		mergePath = wt.Path
 	}
-	if _, err := git.Git(basePath, true, "merge", "--ff-only", feature); err != nil {
+	if samePath(mergePath, basePath) {
+		if cur, err := git.CurrentBranch(basePath); err != nil || cur != baseBranch {
+			termenv.Info("Switching base worktree to '%s'", baseBranch)
+			if _, err := git.Git(basePath, true, "switch", baseBranch); err != nil {
+				return err
+			}
+		}
+	} else {
+		termenv.Info("Base branch '%s' is checked out at %s; merging there", baseBranch, mergePath)
+	}
+	if _, err := git.Git(mergePath, true, "merge", "--ff-only", feature); err != nil {
+		// A common cause when merging where the base branch is checked out:
+		// that worktree has uncommitted changes overlapping the merge.
+		dirtyNote := ""
+		if res, derr := git.Git(mergePath, false, "status", "--porcelain"); derr == nil && strings.TrimSpace(res.Stdout) != "" {
+			dirtyNote = "\n\nNote: " + mergePath + " has uncommitted changes that may conflict with the merge.\nCommit or stash them there first, then retry."
+		}
 		return wterrors.New(wterrors.ErrMergeFailed,
-			"fast-forward merge failed. Manual intervention required:\n  cd %s\n  git merge %s", basePath, feature)
+			"fast-forward merge failed. Manual intervention required:\n  cd %s\n  git merge %s%s", mergePath, feature, dirtyNote)
 	}
 	termenv.Success("Merged %s into %s", feature, baseBranch)
 	fmt.Println()
@@ -346,6 +359,14 @@ func FinishWorktree(opts FinishOptions) error {
 		} else {
 			termenv.Warn("Skipping push step...")
 		}
+	}
+
+	if opts.Keep {
+		termenv.Info("Keeping worktree and branch '%s' (--keep)", feature)
+		fmt.Println()
+		_ = hooks.RunHooks(repo, "merge.post", hookCtx, repo)
+		registry.UpdateLastSeen(repo)
+		return nil
 	}
 
 	if ok, err := confirmStep(fmt.Sprintf("Clean up worktree and delete branch %s", feature)); err != nil {
@@ -603,7 +624,7 @@ func rebaseError(worktreePath, rebaseTarget string, conflicts []string, showTip 
 			fmt.Fprintf(&b, "\n  • %s", f)
 		}
 		if showTip {
-			b.WriteString("\n\nTip: Use --ai-merge flag to get AI assistance with conflicts")
+			b.WriteString("\n\nTip: Use --ai flag to get AI assistance with conflicts")
 		}
 	}
 	return wterrors.New(wterrors.ErrRebaseFailed, "%s", b.String())

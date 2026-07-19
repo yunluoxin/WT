@@ -8,7 +8,7 @@ import (
 
 // Core commands that must have an llm subcommand.
 var llmExpected = []string{
-	"new", "list", "status", "delete", "merge", "pr", "resume", "shell",
+	"new", "list", "status", "delete", "merge", "done", "pr", "resume", "shell",
 	"sync", "clean", "change-base", "doctor", "diff", "tree", "stats",
 	"stash", "backup", "hook", "config", "cd", "init",
 }

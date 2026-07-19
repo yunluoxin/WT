@@ -66,21 +66,50 @@ var llmSpecs = []struct {
     wt delete fix-auth
     wt delete fix-auth --keep-branch
     wt delete myrepo-fix-auth -w -r`},
-	{"merge", `wt merge [target] [-b|-w] [--push] [--dry-run] [--any]
-  Finish a worktree: rebase its branch onto the base branch, fast-forward
-  merge into the base, then remove the worktree and delete the branch.
-  This is the "task is done" command. Flags:
+	{"merge", `wt merge [target] [-b|-w] [--push] [--dry-run] [--any] [--ai]
+  Finish a worktree: rebase its branch onto the local base branch,
+  fast-forward merge into the base, then remove the worktree and delete the
+  branch. The merge always targets the LOCAL base branch; use 'wt sync'
+  separately to pull remote updates. This is the "task is done" command.
+  Flags:
         --push      push the base branch to origin after merging
         --dry-run   preview every step without executing (use this first
                     when unsure)
         --any       allow branches not created by 'wt new' (no wt- prefix)
+        --ai        on rebase conflict, launch the configured AI tool to
+                    resolve it; re-run the command after the AI session
     -i, --interactive  confirm each step — do NOT use in non-interactive runs
   Target defaults to the current worktree; -b/-w disambiguate branch vs
   directory name.
   Examples:
     wt merge fix-auth
     wt merge fix-auth --dry-run
-    wt merge --push            # merge the worktree you are standing in`},
+    wt merge --ai              # merge the worktree you are standing in, AI
+                               # resolves any rebase conflicts`},
+	{"done", `wt done [--ai] [--keep]
+  One-shot finish of the worktree you are standing in (no target argument).
+  Stashes uncommitted changes (including untracked files), rebases and
+  fast-forward merges new commits into the LOCAL base branch (same engine
+  as 'wt merge'), restores the stashed changes onto the base branch, then
+  removes the worktree and deletes the branch. Prefer this over 'wt merge'
+  when the worktree has uncommitted changes you want to keep working on
+  from the base branch.
+  Flags:
+        --ai    launch the configured AI tool to resolve conflicts (rebase
+                conflicts during the merge, or stash-pop conflicts when
+                restoring changes); after the AI session, re-run 'wt done'
+        --keep  keep the worktree and branch instead of cleaning up
+  Notes:
+    - Must be run inside a linked feature worktree, not the main worktree.
+    - If the branch has no new commits, changes are moved onto the base
+      branch directly; if the base branch is not checked out anywhere, the
+      current worktree switches to it and is kept.
+    - If the merge fails, the stashed changes are restored in the feature
+      worktree so the command can simply be re-run.
+  Examples:
+    wt done
+    wt done --ai
+    wt done --keep`},
 	{"pr", `wt pr [target] [-b|-w] [-t <title>] [--body <text>] [--draft] [--no-push] [--any]
   Rebase, push, and open a GitHub Pull Request for the worktree branch via
   the 'gh' CLI. Use this instead of 'wt merge' when the change needs code
@@ -119,18 +148,18 @@ var llmSpecs = []struct {
     wt shell fix-auth git log --oneline -5
     wt shell fix-auth make build
     wt shell npm test              # run in the current worktree`},
-	{"sync", `wt sync [target] [-b|-w] [--all] [--fetch-only] [--ai-merge]
+	{"sync", `wt sync [target] [-b|-w] [--all] [--fetch-only] [--ai]
   Fetch and rebase worktree(s) onto the latest base branch. Run this when
   the base branch has moved and the worktree is behind.
   Flags:
         --all         sync every worktree in topological order
         --fetch-only  fetch updates but do not rebase
-        --ai-merge    on rebase conflict, launch the configured AI tool
+        --ai          on rebase conflict, launch the configured AI tool
                       (non-interactive mode) to resolve it
   Examples:
     wt sync fix-auth
     wt sync --all
-    wt sync fix-auth --ai-merge`},
+    wt sync fix-auth --ai`},
 	{"clean", `wt clean [--merged] [--older-than <days>] [--dry-run]
   Batch-delete worktrees by criteria.
   Flags:

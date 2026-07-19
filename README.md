@@ -53,6 +53,7 @@ wt list                # list worktrees
 wt resume wt-fix-auth  # resume AI session in a worktree
 wt pr                  # rebase, push, create GitHub PR (requires gh)
 wt merge               # rebase + fast-forward merge into base + cleanup
+wt done                # like merge, but also moves uncommitted changes onto the base branch
 ```
 
 Branches created by `wt new` carry a `wt-` prefix so wt-managed worktrees
@@ -64,7 +65,7 @@ unless you pass `--any`.
 
 | Group | Commands |
 |---|---|
-| Core workflow | `new`, `resume`, `pr`, `merge`, `finish` (deprecated alias), `shell` |
+| Core workflow | `new`, `resume`, `pr`, `merge`, `done`, `finish` (deprecated alias), `shell` |
 | Worktree management | `list`, `status`, `delete`, `clean`, `sync`, `change-base` |
 | Global (cross-repo) | `-g/--global` flag, `scan`, `prune` |
 | Inspection | `doctor`, `diff`, `tree`, `stats` |

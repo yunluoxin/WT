@@ -107,7 +107,7 @@ func deleteCmd() *cobra.Command {
 }
 
 func mergeCmd() *cobra.Command {
-	var push, interactive, dryRun, any bool
+	var push, interactive, dryRun, any, ai bool
 	var tf targetFlags
 	cmd := &cobra.Command{
 		Use:   "merge [target]",
@@ -123,6 +123,7 @@ func mergeCmd() *cobra.Command {
 				Interactive: interactive,
 				DryRun:      dryRun,
 				Any:         any,
+				AIMerge:     ai,
 				LookupMode:  tf.mode(),
 				Global:      globalMode,
 			})
@@ -132,7 +133,27 @@ func mergeCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Confirm each step")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview operations without executing")
 	cmd.Flags().BoolVar(&any, "any", false, "Allow branches not created by 'wt new' (no wt- prefix)")
+	cmd.Flags().BoolVar(&ai, "ai", false, "Launch AI tool to resolve rebase conflicts")
 	tf.add(cmd)
+	return cmd
+}
+
+func doneCmd() *cobra.Command {
+	var ai, keep bool
+	cmd := &cobra.Command{
+		Use:   "done",
+		Short: "Finish the current worktree: move uncommitted changes and commits onto the base branch, then clean up",
+		Long:  "Run inside a feature worktree. Stashes uncommitted changes, rebases and fast-forward merges new commits into the base branch (like 'wt merge'), restores the stashed changes on the base branch, and removes the worktree and branch (unless --keep).",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ops.DoneWorktree(ops.DoneOptions{
+				AI:   ai,
+				Keep: keep,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&ai, "ai", false, "Launch AI tool to resolve conflicts (stash pop or rebase)")
+	cmd.Flags().BoolVar(&keep, "keep", false, "Keep the worktree and branch after finishing")
 	return cmd
 }
 

@@ -1,0 +1,233 @@
+package e2e
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"wt/internal/testutil"
+)
+
+// Dirty worktree, no new commits: changes are moved onto the base branch
+// (main worktree) and the worktree + branch are removed.
+func TestDoneNoCommitsMovesChanges(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "done-nc", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-nc")
+
+	// Uncommitted tracked + untracked changes, no commits.
+	testutil.WriteFile(t, wtPath, "README.md", "# test repo\nuncommitted change\n")
+	testutil.WriteFile(t, wtPath, "untracked.txt", "new file\n")
+
+	out, stderr, err := run(t, wtPath, "done")
+	if err != nil {
+		t.Fatalf("done: %v\n%s\n%s", err, out, stderr)
+	}
+
+	// Worktree and branch are gone.
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree not removed after done")
+	}
+	if out := testutil.GitOut(t, repo, "branch", "--list", "wt-done-nc"); strings.TrimSpace(out) != "" {
+		t.Errorf("branch wt-done-nc still exists")
+	}
+
+	// Changes landed in the main worktree, uncommitted.
+	data, err := os.ReadFile(filepath.Join(repo, "README.md"))
+	if err != nil || !strings.Contains(string(data), "uncommitted change") {
+		t.Errorf("tracked change not moved to main worktree: %v\n%s", err, data)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "untracked.txt")); err != nil {
+		t.Error("untracked file not moved to main worktree")
+	}
+	if out := testutil.GitOut(t, repo, "status", "--porcelain"); strings.TrimSpace(out) == "" {
+		t.Error("main worktree should be dirty after done")
+	}
+}
+
+// Dirty worktree with new commits: commits are merged into base, changes are
+// restored there, worktree + branch removed.
+func TestDoneWithCommitsMergesAndRestores(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "done-wc", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-wc")
+
+	testutil.WriteFile(t, wtPath, "feature.txt", "feature work\n")
+	testutil.Commit(t, wtPath, "feature commit")
+	testutil.WriteFile(t, wtPath, "wip.txt", "uncommitted\n")
+
+	out, stderr, err := run(t, wtPath, "done")
+	if err != nil {
+		t.Fatalf("done: %v\n%s\n%s", err, out, stderr)
+	}
+
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree not removed after done")
+	}
+	// Commit merged into base.
+	if _, err := os.Stat(filepath.Join(repo, "feature.txt")); err != nil {
+		t.Error("feature commit not merged to main")
+	}
+	// Uncommitted change restored on base (in the main worktree).
+	data, err := os.ReadFile(filepath.Join(repo, "wip.txt"))
+	if err != nil || string(data) != "uncommitted\n" {
+		t.Errorf("stashed change not restored on base: %v", err)
+	}
+}
+
+// --keep retains the worktree and branch after a successful done.
+func TestDoneKeep(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "done-keep", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-keep")
+	testutil.WriteFile(t, wtPath, "keep.txt", "committed\n")
+	testutil.Commit(t, wtPath, "feature commit")
+	testutil.WriteFile(t, wtPath, "wip.txt", "uncommitted\n")
+
+	out, stderr, err := run(t, wtPath, "done", "--keep")
+	if err != nil {
+		t.Fatalf("done --keep: %v\n%s\n%s", err, out, stderr)
+	}
+
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Error("worktree removed despite --keep")
+	}
+	if out := testutil.GitOut(t, repo, "branch", "--list", "wt-done-keep"); strings.TrimSpace(out) == "" {
+		t.Error("branch deleted despite --keep")
+	}
+	// Commit still merged into base; change restored on base.
+	if _, err := os.Stat(filepath.Join(repo, "keep.txt")); err != nil {
+		t.Error("feature commit not merged to main")
+	}
+	if _, err := os.Stat(filepath.Join(repo, "wip.txt")); err != nil {
+		t.Error("stashed change not restored on base")
+	}
+}
+
+// Running done in the main worktree is refused.
+func TestDoneRefusedInMainWorktree(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "done"); err == nil {
+		t.Error("expected done in main worktree to fail")
+	}
+}
+
+// Stash pop conflicts without --ai: done fails, the stash entry is kept.
+func TestDoneNoCommitsPopConflict(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "done-pc", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-pc")
+
+	// Same line modified in the worktree (uncommitted) and committed on main.
+	testutil.WriteFile(t, wtPath, "README.md", "# test repo\nworktree version\n")
+	testutil.WriteFile(t, repo, "README.md", "# test repo\nmain version\n")
+	testutil.Commit(t, repo, "main change")
+
+	out, stderr, err := run(t, wtPath, "done")
+	if err == nil {
+		t.Fatalf("expected done to fail on pop conflict:\n%s\n%s", out, stderr)
+	}
+	combined := out + stderr
+	if !strings.Contains(combined, "stash") {
+		t.Errorf("expected stash-related error:\n%s", combined)
+	}
+	// Stash entry kept for manual recovery.
+	if out := testutil.GitOut(t, repo, "stash", "list"); !strings.Contains(out, "wt done") {
+		t.Errorf("stash entry not kept after conflict:\n%s", out)
+	}
+}
+
+// Merge failure with a dirty worktree: the stash is restored in the feature
+// worktree so the command can be re-run.
+func TestDoneMergeFailureRestoresStash(t *testing.T) {
+	repo := testutil.NewRepo(t)
+	if _, _, err := run(t, repo, "new", "done-mf", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-mf")
+
+	// Diverge: same file committed on both branches, plus uncommitted work.
+	testutil.WriteFile(t, wtPath, "a.txt", "feature version\n")
+	testutil.Commit(t, wtPath, "feature change")
+	testutil.WriteFile(t, repo, "a.txt", "main version\n")
+	testutil.Commit(t, repo, "main change")
+	testutil.WriteFile(t, wtPath, "wip.txt", "uncommitted\n")
+
+	out, stderr, err := run(t, wtPath, "done")
+	if err == nil {
+		t.Fatalf("expected done to fail on rebase conflict:\n%s\n%s", out, stderr)
+	}
+
+	// Worktree survives, branch intact, rebase aborted.
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Error("worktree removed after failed done")
+	}
+	res, _ := exec.Command("git", "-C", wtPath, "status", "--porcelain").CombinedOutput()
+	if strings.Contains(string(res), "UU") {
+		t.Error("rebase not aborted, conflicts remain")
+	}
+	// Stash restored: uncommitted file is back in the feature worktree.
+	if _, err := os.Stat(filepath.Join(wtPath, "wip.txt")); err != nil {
+		t.Error("stashed changes not restored in feature worktree")
+	}
+	// Nothing leaked into the stash list.
+	if out := testutil.GitOut(t, repo, "stash", "list"); strings.Contains(out, "wt done") {
+		t.Errorf("stash entry left behind after restore:\n%s", out)
+	}
+}
+
+// Base branch checked out in a non-main worktree: merge and stash restore
+// happen there instead of switching the main worktree.
+func TestDoneBaseInOtherWorktree(t *testing.T) {
+	repo := testutil.NewRepo(t)
+
+	// Detach the main worktree so main can be checked out elsewhere.
+	testutil.GitOut(t, repo, "switch", "--detach")
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", repo, "switch", "main").Run()
+	})
+	// Park main in a second worktree so the base branch is "elsewhere".
+	mainElsewhere := filepath.Join(filepath.Dir(repo), "myrepo-main-elsewhere")
+	if out, err := exec.Command("git", "-C", repo, "worktree", "add", mainElsewhere, "main").CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %v\n%s", err, out)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", repo, "worktree", "remove", "--force", mainElsewhere).Run()
+	})
+
+	if out, stderr, err := runEnv(t, mainElsewhere, t.TempDir(), []string{"WT_AI_TOOL="}, "new", "done-bo", "--no-term"); err != nil {
+		t.Fatalf("new: %v\n%s\n%s", err, out, stderr)
+	}
+	// 'wt new' names the worktree after the worktree it runs from.
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-main-elsewhere-wt-done-bo")
+	testutil.WriteFile(t, wtPath, "bo.txt", "feature work\n")
+	testutil.Commit(t, wtPath, "feature commit")
+	testutil.WriteFile(t, wtPath, "wip.txt", "uncommitted\n")
+
+	out, stderr, err := run(t, wtPath, "done")
+	if err != nil {
+		t.Fatalf("done: %v\n%s\n%s", err, out, stderr)
+	}
+
+	// Merge happened where main is checked out.
+	if _, err := os.Stat(filepath.Join(mainElsewhere, "bo.txt")); err != nil {
+		t.Error("feature commit not merged into main (other worktree)")
+	}
+	// Stash restored there too.
+	if _, err := os.Stat(filepath.Join(mainElsewhere, "wip.txt")); err != nil {
+		t.Error("stashed change not restored where base is checked out")
+	}
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree not removed after done")
+	}
+}
