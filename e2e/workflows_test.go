@@ -440,7 +440,7 @@ func TestInitDoesNotMatchComments(t *testing.T) {
 	}
 	cmd := exec.Command(binaryPath, "init", "zsh")
 	cmd.Dir = repo
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "WT_NON_INTERACTIVE=1"}
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "USERPROFILE=" + home, "WT_NON_INTERACTIVE=1"}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("init: %v\n%s", err, out)
@@ -467,7 +467,7 @@ func TestInitUpgradesOldBlock(t *testing.T) {
 	}
 	cmd := exec.Command(binaryPath, "init", "zsh")
 	cmd.Dir = repo
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "WT_NON_INTERACTIVE=1"}
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "USERPROFILE=" + home, "WT_NON_INTERACTIVE=1"}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("init: %v\n%s", err, out)
