@@ -125,9 +125,10 @@ var llmSpecs = []struct {
     wt pr fix-auth --draft -t "Fix auth token refresh"`},
 	{"resume", `wt resume [worktree] [-b|-w] [-T <method>]
   Re-open the configured AI tool inside an existing worktree, resuming its
-  previous session: claude presets get --continue, codex presets get
-  'resume --last', anything else gets --resume appended. With
-  session.auto_resume (or WT_AUTO_RESUME=1), 'wt new' also resumes.
+  previous session. The resume command comes from the preset's resume
+  variant (claude gets --continue, codex gets 'resume --last') or from
+  'wt config set ai-tool.resume'; anything else gets --resume appended.
+  With session.auto_resume (or WT_AUTO_RESUME=1), 'wt new' also resumes.
     -T, --term <method>   same launch-method enum as 'wt new'
                           (foreground, detach, iterm-tab, tmux, ...)
   Omitting the target opens an interactive selector — always pass a target
@@ -295,13 +296,23 @@ Subcommands:
 
 === Setting your AI tool ===
 Two ways:
-  1. Custom command — use the special key 'ai-tool' (with a DASH, not a
-     dot). The value is split on whitespace into command + args:
-       wt config set ai-tool "claude --dangerously-skip-permissions"
-       wt config set ai-tool "aider --model sonnet"
-       wt config set ai-tool "my-wrapper --flag value"
+  1. Custom command — use the special keys 'ai-tool.name' / 'ai-tool.merge' /
+     'ai-tool.resume' (with DASHES, not dots; 'ai-tool' alone is an alias
+     for ai-tool.name). The value is split on whitespace into command+args:
+       wt config set ai-tool.name "claude --dangerously-skip-permissions"
+       wt config set ai-tool.name "aider --model sonnet"
+       wt config set ai-tool.merge "aider --yes-always --message {prompt}"
+       wt config set ai-tool.merge "codex exec"          # prompt appended
+       wt config set ai-tool.resume "aider --restore-chat-history"
+     In ai-tool.merge, {prompt} marks where the conflict-resolution prompt
+     goes; without it the prompt is appended as the final argument. Setting
+     ai-tool.merge / ai-tool.resume to an empty value clears the override
+     and restores preset inference. The ai_tool.merge_stdin config key
+     (true/false, via 'wt config set ai_tool.merge_stdin true') makes the
+     merge prompt arrive on stdin instead of argv.
      To disable AI launching entirely: wt config use-preset no-op
-  2. Built-in preset — <name> must be one of exactly:
+  2. Built-in preset — <name> must be one of exactly (each preset sets
+     launch + resume + merge together):
        no-op                (none)                                   disable launching
        claude               claude                                    Claude Code (default)
        claude-yolo          claude --dangerously-skip-permissions
@@ -311,12 +322,28 @@ Two ways:
        codex-yolo           codex --dangerously-bypass-approvals-and-sandbox
        cursor-agent         cursor-agent                              Cursor Agent CLI
        cursor-agent-yolo    cursor-agent --force
+       aider                aider
+       gemini               gemini
+       opencode             opencode
+       crush                crush
+       kimi                 kimi
+       qwen                 qwen
+       copilot              copilot
+       goose                goose
      Unknown names fail with: unknown preset "<name>".
 
 === All 'wt config set' keys ===
-  ai-tool "<cmd> [args...]"          special key (dash!): AI tool command.
-                                     Empty value is rejected — use
+  ai-tool.name "<cmd> [args...]"     special key (dash!): AI tool launch
+                                     command. Empty value is rejected — use
                                      'use-preset no-op' to disable instead.
+  ai-tool "<cmd> [args...]"          alias of ai-tool.name
+  ai-tool.merge "<cmd> [args...]"    merge (conflict-resolution) command;
+                                     {prompt} placeholder supported, empty
+                                     value clears the override
+  ai-tool.resume "<cmd> [args...]"   resume command; empty value clears
+                                     the override
+  ai_tool.merge_stdin <true|false>   feed the merge prompt via stdin
+                                     instead of argv (default false)
   launch.method <method>             default launch method for 'wt new' and
                                      'wt resume'; same enum as -T/--term:
                                      foreground, detach, iterm-window,
@@ -338,9 +365,17 @@ everything else as strings. Unknown dot-paths are accepted and stored, but
 only the keys above have an effect.
 
 === Environment overrides (win over config) ===
-  WT_AI_TOOL="<cmd> [args...]"   overrides the AI tool; empty string disables
+  WT_AI_TOOL="<cmd> [args...]"   overrides the AI tool launch command;
+                                 empty string disables; a preset name
+                                 expands to that preset
+  WT_AI_TOOL_MERGE="<cmd>..."    overrides the merge command ({prompt}
+                                 placeholder supported)
+  WT_AI_TOOL_RESUME="<cmd>..."   overrides the resume command
   WT_LAUNCH_METHOD=<method>      overrides launch.method
   WT_AUTO_RESUME=1|true|yes      forces auto-resume on (0/false/no = off)
+All WT_* overrides propagate into the launched AI process environment, so
+they stay in effect across the whole chain (e.g. wt done --ai re-launching
+the tool, terminal-multiplexer launch methods).
 
 Examples:
   wt config show

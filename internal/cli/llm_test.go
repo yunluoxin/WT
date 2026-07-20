@@ -96,6 +96,9 @@ func TestLLMConfigSnippetListsAllPresets(t *testing.T) {
 	for _, preset := range []string{
 		"no-op", "claude", "claude-yolo", "claude-remote",
 		"claude-yolo-remote", "codex", "codex-yolo",
+		"cursor-agent", "cursor-agent-yolo",
+		"aider", "gemini", "opencode", "crush", "kimi", "qwen",
+		"copilot", "goose",
 	} {
 		if !strings.Contains(snippet, preset) {
 			t.Errorf("config snippet missing preset %q", preset)
@@ -106,12 +109,14 @@ func TestLLMConfigSnippetListsAllPresets(t *testing.T) {
 func TestLLMConfigSnippetDocumentsSetKeys(t *testing.T) {
 	snippet := specFor(t, "config")
 	for _, want := range []string{
-		// How to set a custom AI tool — the key has a dash, not a dot.
-		"ai-tool",
+		// How to set a custom AI tool — the keys have dashes, not dots.
+		"ai-tool", "ai-tool.name", "ai-tool.merge", "ai-tool.resume",
+		"{prompt}",
 		"launch.method", "launch.session_prefix",
 		"git.default_base_branch", "session.auto_resume",
 		// Env overrides.
-		"WT_AI_TOOL", "WT_LAUNCH_METHOD", "WT_AUTO_RESUME",
+		"WT_AI_TOOL", "WT_AI_TOOL_MERGE", "WT_AI_TOOL_RESUME",
+		"WT_LAUNCH_METHOD", "WT_AUTO_RESUME",
 		// Subcommands.
 		"config show", "config set", "use-preset", "list-presets", "config reset",
 	} {

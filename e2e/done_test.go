@@ -304,6 +304,79 @@ git rebase --continue
 	}
 }
 
+// With --ai and WT_AI_TOOL_MERGE set, the merge invocation must use the
+// override command (prompt appended), and the WT_* overrides must be
+// visible inside the AI tool process (env passthrough down the chain).
+func TestDoneAIUsesMergeEnvOverride(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake AI helper is a bash script")
+	}
+	repo := testutil.NewRepo(t)
+	home := sharedHome(t)
+
+	// Fake AI: records its argv and the WT_* env it sees, then resolves the
+	// rebase like the auto-continue helper.
+	logFile := filepath.Join(home, "fake-ai-merge.log")
+	fakeAI := filepath.Join(home, "fake-ai-merge.sh")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+{
+  echo "argv: $*"
+  echo "WT_AI_TOOL=$WT_AI_TOOL"
+  echo "WT_AI_TOOL_MERGE=$WT_AI_TOOL_MERGE"
+} > "` + logFile + `"
+export GIT_EDITOR=true
+export GIT_SEQUENCE_EDITOR=true
+for f in $(git diff --name-only --diff-filter=U); do
+  grep -v -E '^(<<<<<<<|=======|>>>>>>>)' "$f" > "$f.resolved"
+  mv "$f.resolved" "$f"
+  git add "$f"
+done
+git rebase --continue
+`
+	if err := os.WriteFile(fakeAI, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runHome(t, repo, home, "new", "done-merge-env", "--no-term"); err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo-wt-done-merge-env")
+
+	testutil.WriteFile(t, wtPath, "s.txt", "from feature\n")
+	testutil.Commit(t, wtPath, "feature change")
+	testutil.WriteFile(t, repo, "s.txt", "from main\n")
+	testutil.Commit(t, repo, "main change")
+
+	out, stderr, err := runEnv(t, wtPath, home, []string{
+		"WT_AI_TOOL=" + fakeAI,
+		"WT_AI_TOOL_MERGE=" + fakeAI + " exec --headless",
+	}, "done", "--ai")
+	if err != nil {
+		t.Fatalf("done --ai: %v\n%s\n%s", err, out, stderr)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("fake AI log not written: %v", err)
+	}
+	log := string(data)
+	// The merge override took effect: extra flags first, prompt appended last.
+	if !strings.Contains(log, "argv: exec --headless ") {
+		t.Errorf("merge override argv missing, log:\n%s", log)
+	}
+	if !strings.Contains(log, "Resolve the merge conflicts") {
+		t.Errorf("prompt not appended to merge command, log:\n%s", log)
+	}
+	// Passthrough: the tool process sees both WT_* overrides.
+	if !strings.Contains(log, "WT_AI_TOOL="+fakeAI) {
+		t.Errorf("WT_AI_TOOL not passed through, log:\n%s", log)
+	}
+	if !strings.Contains(log, "WT_AI_TOOL_MERGE="+fakeAI+" exec --headless") {
+		t.Errorf("WT_AI_TOOL_MERGE not passed through, log:\n%s", log)
+	}
+}
+
 // When the AI session is cancelled (exits non-zero without finishing the
 // rebase), done must abort the unfinished rebase, restore the stash, and fail
 // — leaving the worktree clean so the command can be re-run.

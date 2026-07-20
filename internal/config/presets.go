@@ -1,61 +1,140 @@
 package config
 
-// Preset describes an AI tool preset: the full command as argv.
+// Preset describes an AI tool preset: the launch command plus the resume
+// and merge invocation variants, all as argv.
 type Preset struct {
 	Name        string
-	Command     []string
+	Command     []string // launch (interactive)
+	Resume      []string // full resume command; empty = append "--resume" to Command
+	Merge       []string // full merge command (prompt appended); empty = Command + prompt
+	MergeStdin  bool     // merge prompt is fed via stdin instead of argv
 	Description string
 }
 
-// AIToolPresets mirrors the Python AI_TOOL_PRESETS.
+// AIToolPresets lists the built-in AI tool presets. Each preset is a
+// recommended ai_tool configuration; applying one writes all of its
+// variants into the config.
 var AIToolPresets = []Preset{
 	{Name: "no-op", Command: []string{}, Description: "Disable AI tool launching"},
-	{Name: "claude", Command: []string{"claude"}, Description: "Claude Code (default)"},
-	{Name: "claude-yolo", Command: []string{"claude", "--dangerously-skip-permissions"}, Description: "Claude Code, skip permissions"},
-	{Name: "claude-remote", Command: []string{"claude", "/remote-control"}, Description: "Claude Code with remote control"},
-	{Name: "claude-yolo-remote", Command: []string{"claude", "--dangerously-skip-permissions", "/remote-control"}, Description: "Claude Code remote + skip permissions"},
-	{Name: "codex", Command: []string{"codex"}, Description: "OpenAI Codex"},
-	{Name: "codex-yolo", Command: []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}, Description: "Codex, bypass approvals and sandbox"},
-	{Name: "cursor-agent", Command: []string{"cursor-agent"}, Description: "Cursor Agent CLI"},
-	{Name: "cursor-agent-yolo", Command: []string{"cursor-agent", "--force"}, Description: "Cursor Agent, auto-allow commands"},
-}
-
-// ResumePresets maps preset name -> resume command.
-// Presets not listed here resume by appending "--resume".
-var ResumePresets = map[string][]string{
-	"claude":             {"claude", "--continue"},
-	"claude-yolo":        {"claude", "--dangerously-skip-permissions", "--continue"},
-	"claude-remote":      {"claude", "--continue", "/remote-control"},
-	"claude-yolo-remote": {"claude", "--dangerously-skip-permissions", "--continue", "/remote-control"},
-	"codex":              {"codex", "resume", "--last"},
-	"codex-yolo":         {"codex", "resume", "--dangerously-bypass-approvals-and-sandbox", "--last"},
-	"cursor-agent":       {"cursor-agent", "resume"},
-	"cursor-agent-yolo":  {"cursor-agent", "--force", "resume"},
-}
-
-// MergePreset describes how to invoke the AI tool for --ai conflict resolution.
-type MergePreset struct {
-	BaseOverride []string // replaces the base command when non-empty
-	Flags        []string // appended after the base command
-}
-
-// MergePresets maps preset name -> merge invocation; the prompt is
-// appended at the end. Unlisted presets append the prompt directly.
-var MergePresets = map[string]MergePreset{
-	"claude":             {Flags: []string{"--print", "--tools=default"}},
-	"claude-yolo":        {Flags: []string{"--print", "--tools=default"}},
-	"claude-remote":      {BaseOverride: []string{"claude"}, Flags: []string{"--print", "--tools=default"}},
-	"claude-yolo-remote": {BaseOverride: []string{"claude", "--dangerously-skip-permissions"}, Flags: []string{"--print", "--tools=default"}},
-	"codex":              {Flags: []string{"--non-interactive"}},
-	"codex-yolo":         {Flags: []string{"--non-interactive"}},
-	// cursor-agent: --print is headless (no TUI, prints and exits). --trust
-	// skips the workspace-trust prompt that only appears in headless mode and
-	// would otherwise block the run; --force auto-allows the shell commands
-	// the agent runs to resolve conflicts.
-	"cursor-agent": {Flags: []string{"--print", "--trust", "--force"}},
-	// The yolo launch command already carries --force; reset the base so the
-	// merge invocation is not "--force --print --trust --force".
-	"cursor-agent-yolo": {BaseOverride: []string{"cursor-agent"}, Flags: []string{"--print", "--trust", "--force"}},
+	{
+		Name:        "claude",
+		Command:     []string{"claude"},
+		Resume:      []string{"claude", "--continue"},
+		Merge:       []string{"claude", "--print", "--tools=default"},
+		Description: "Claude Code (default)",
+	},
+	{
+		Name:        "claude-yolo",
+		Command:     []string{"claude", "--dangerously-skip-permissions"},
+		Resume:      []string{"claude", "--dangerously-skip-permissions", "--continue"},
+		Merge:       []string{"claude", "--print", "--tools=default"},
+		Description: "Claude Code, skip permissions",
+	},
+	{
+		Name:        "claude-remote",
+		Command:     []string{"claude", "/remote-control"},
+		Resume:      []string{"claude", "--continue", "/remote-control"},
+		Merge:       []string{"claude", "--print", "--tools=default"},
+		Description: "Claude Code with remote control",
+	},
+	{
+		Name:        "claude-yolo-remote",
+		Command:     []string{"claude", "--dangerously-skip-permissions", "/remote-control"},
+		Resume:      []string{"claude", "--dangerously-skip-permissions", "--continue", "/remote-control"},
+		Merge:       []string{"claude", "--dangerously-skip-permissions", "--print", "--tools=default"},
+		Description: "Claude Code remote + skip permissions",
+	},
+	{
+		Name:        "codex",
+		Command:     []string{"codex"},
+		Resume:      []string{"codex", "resume", "--last"},
+		Merge:       []string{"codex", "exec"},
+		Description: "OpenAI Codex",
+	},
+	{
+		Name:        "codex-yolo",
+		Command:     []string{"codex", "--dangerously-bypass-approvals-and-sandbox"},
+		Resume:      []string{"codex", "resume", "--dangerously-bypass-approvals-and-sandbox", "--last"},
+		Merge:       []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"},
+		Description: "Codex, bypass approvals and sandbox",
+	},
+	{
+		Name:    "cursor-agent",
+		Command: []string{"cursor-agent"},
+		Resume:  []string{"cursor-agent", "resume"},
+		// --print is headless (no TUI, prints and exits). --trust skips the
+		// workspace-trust prompt that only appears in headless mode and would
+		// otherwise block the run; --force auto-allows the shell commands the
+		// agent runs to resolve conflicts.
+		Merge:       []string{"cursor-agent", "--print", "--trust", "--force"},
+		Description: "Cursor Agent CLI",
+	},
+	{
+		Name:    "cursor-agent-yolo",
+		Command: []string{"cursor-agent", "--force"},
+		Resume:  []string{"cursor-agent", "--force", "resume"},
+		// The yolo launch command already carries --force; the merge
+		// invocation restarts from the plain binary so it is not
+		// "--force --print --trust --force".
+		Merge:       []string{"cursor-agent", "--print", "--trust", "--force"},
+		Description: "Cursor Agent, auto-allow commands",
+	},
+	{
+		Name:        "aider",
+		Command:     []string{"aider"},
+		Resume:      []string{"aider", "--restore-chat-history"},
+		Merge:       []string{"aider", "--message"},
+		Description: "Aider",
+	},
+	{
+		Name:        "gemini",
+		Command:     []string{"gemini"},
+		Resume:      []string{"gemini", "-r", "latest"},
+		Merge:       []string{"gemini", "-p"},
+		Description: "Google Gemini CLI",
+	},
+	{
+		Name:        "opencode",
+		Command:     []string{"opencode"},
+		Resume:      []string{"opencode", "run", "--continue"},
+		Merge:       []string{"opencode", "run"},
+		Description: "OpenCode",
+	},
+	{
+		Name:        "crush",
+		Command:     []string{"crush"},
+		Resume:      []string{"crush", "--continue"},
+		Merge:       []string{"crush", "run"},
+		Description: "Crush (Charm)",
+	},
+	{
+		Name:        "kimi",
+		Command:     []string{"kimi"},
+		Resume:      []string{"kimi", "--continue"},
+		Merge:       []string{"kimi", "--print", "-p"},
+		Description: "Kimi CLI (Moonshot)",
+	},
+	{
+		Name:        "qwen",
+		Command:     []string{"qwen"},
+		Resume:      []string{"qwen", "--continue"},
+		Merge:       []string{"qwen", "-p"},
+		Description: "Qwen Code",
+	},
+	{
+		Name:        "copilot",
+		Command:     []string{"copilot"},
+		Resume:      []string{"copilot", "--continue"},
+		Merge:       []string{"copilot", "-p"},
+		Description: "GitHub Copilot CLI",
+	},
+	{
+		Name:        "goose",
+		Command:     []string{"goose"},
+		Resume:      []string{"goose", "session", "--resume"},
+		Merge:       []string{"goose", "run", "-t"},
+		Description: "Goose (Block)",
+	},
 }
 
 // FindPreset returns the preset by name.
@@ -68,7 +147,7 @@ func FindPreset(name string) (Preset, bool) {
 	return Preset{}, false
 }
 
-// PresetNameForCommand finds the preset whose command matches, if any.
+// PresetNameForCommand finds the preset whose launch command matches, if any.
 func PresetNameForCommand(cmd []string) string {
 	for _, p := range AIToolPresets {
 		if equalStrings(p.Command, cmd) {

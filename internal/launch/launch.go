@@ -4,6 +4,7 @@ package launch
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -110,7 +111,40 @@ func AITool(opts Options) error {
 	}
 
 	cmd := CommandString(argv)
-	return dispatch(spec, opts.WorktreePath, cmd, toolName, cfg)
+	// merge_stdin: feed the prompt via a pipe instead of argv.
+	if opts.Prompt != "" && aitool.MergeUsesStdin(cfg) {
+		cmd = "printf '%s' " + shellQuote(opts.Prompt) + " | " + cmd
+	}
+	return dispatch(spec, opts.WorktreePath, withEnvOverrides(cmd), toolName, cfg)
+}
+
+// passthroughEnv lists the WT_* override variables propagated into the
+// launched command. Terminal-multiplexer launch methods (tmux server,
+// iTerm windows, wezterm spawn) do not share wt's process environment, so
+// the overrides are injected into the command line itself; this keeps the
+// whole chain (e.g. `wt done --ai` re-launching the tool) consistent.
+var passthroughEnv = []string{
+	"WT_AI_TOOL",
+	"WT_AI_TOOL_MERGE",
+	"WT_AI_TOOL_RESUME",
+	"WT_LAUNCH_METHOD",
+	"WT_AUTO_RESUME",
+	"WT_NON_INTERACTIVE",
+}
+
+// withEnvOverrides prefixes cmd with `env KEY=VAL ...` for every set
+// passthrough variable. A no-op when none are set.
+func withEnvOverrides(cmd string) string {
+	var prefix []string
+	for _, k := range passthroughEnv {
+		if v, ok := os.LookupEnv(k); ok {
+			prefix = append(prefix, k+"="+shellQuote(v))
+		}
+	}
+	if len(prefix) == 0 {
+		return cmd
+	}
+	return "env " + strings.Join(prefix, " ") + " " + cmd
 }
 
 func dispatch(spec config.TermSpec, path, cmd, toolName string, cfg map[string]any) error {

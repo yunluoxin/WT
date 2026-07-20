@@ -1,6 +1,7 @@
 package launch
 
 import (
+	"os"
 	"testing"
 
 	"wt/internal/config"
@@ -32,6 +33,26 @@ func TestCommandString(t *testing.T) {
 	want := "claude --print 'hello world'"
 	if got != want {
 		t.Errorf("CommandString = %q, want %q", got, want)
+	}
+}
+
+func TestWithEnvOverrides(t *testing.T) {
+	// Clear all passthrough vars so the base case is deterministic.
+	for _, k := range passthroughEnv {
+		t.Setenv(k, "__sentinel__")
+		os.Unsetenv(k)
+	}
+
+	if got := withEnvOverrides("claude --continue"); got != "claude --continue" {
+		t.Errorf("no env set: got %q, want unchanged command", got)
+	}
+
+	t.Setenv("WT_AI_TOOL", "codex")
+	t.Setenv("WT_AI_TOOL_MERGE", "opencode run {prompt}")
+	got := withEnvOverrides("claude --continue")
+	want := "env WT_AI_TOOL=codex WT_AI_TOOL_MERGE='opencode run {prompt}' claude --continue"
+	if got != want {
+		t.Errorf("withEnvOverrides = %q, want %q", got, want)
 	}
 }
 

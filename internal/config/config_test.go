@@ -166,35 +166,45 @@ func TestPresets(t *testing.T) {
 	}
 }
 
-func TestResumeAndMergePresets(t *testing.T) {
-	if got := ResumePresets["claude"]; len(got) != 2 || got[1] != "--continue" {
-		t.Errorf("claude resume preset wrong: %v", got)
+func TestPresetVariants(t *testing.T) {
+	mustPreset := func(name string) Preset {
+		t.Helper()
+		p, ok := FindPreset(name)
+		if !ok {
+			t.Fatalf("preset %q not found", name)
+		}
+		return p
 	}
-	if got := ResumePresets["codex"]; len(got) != 3 || got[1] != "resume" || got[2] != "--last" {
-		t.Errorf("codex resume preset wrong: %v", got)
-	}
-	mp := MergePresets["claude-remote"]
-	if len(mp.BaseOverride) != 1 || mp.BaseOverride[0] != "claude" {
-		t.Errorf("claude-remote merge base override wrong: %v", mp.BaseOverride)
-	}
-
-	// cursor-agent presets.
-	if got := ResumePresets["cursor-agent"]; len(got) != 2 || got[0] != "cursor-agent" || got[1] != "resume" {
-		t.Errorf("cursor-agent resume preset wrong: %v", got)
-	}
-	cmp := MergePresets["cursor-agent"]
-	want := []string{"--print", "--trust", "--force"}
-	if len(cmp.Flags) != len(want) {
-		t.Fatalf("cursor-agent merge flags wrong: %v", cmp.Flags)
-	}
-	for i, f := range want {
-		if cmp.Flags[i] != f {
-			t.Errorf("cursor-agent merge flags = %v, want %v", cmp.Flags, want)
-			break
+	assertArgv := func(name string, got, want []string) {
+		t.Helper()
+		if !equalStrings(got, want) {
+			t.Errorf("%s = %v, want %v", name, got, want)
 		}
 	}
+
+	assertArgv("claude resume", mustPreset("claude").Resume, []string{"claude", "--continue"})
+	assertArgv("codex resume", mustPreset("codex").Resume, []string{"codex", "resume", "--last"})
+	assertArgv("codex merge", mustPreset("codex").Merge, []string{"codex", "exec"})
+	assertArgv("claude-remote merge", mustPreset("claude-remote").Merge,
+		[]string{"claude", "--print", "--tools=default"})
+
+	// cursor-agent presets.
+	assertArgv("cursor-agent resume", mustPreset("cursor-agent").Resume, []string{"cursor-agent", "resume"})
+	assertArgv("cursor-agent merge", mustPreset("cursor-agent").Merge,
+		[]string{"cursor-agent", "--print", "--trust", "--force"})
+	// The yolo merge invocation must not duplicate --force from the launch command.
+	assertArgv("cursor-agent-yolo merge", mustPreset("cursor-agent-yolo").Merge,
+		[]string{"cursor-agent", "--print", "--trust", "--force"})
 	if got := PresetNameForCommand([]string{"cursor-agent"}); got != "cursor-agent" {
 		t.Errorf("PresetNameForCommand(cursor-agent) = %q", got)
+	}
+
+	// Newly added community presets all define launch/resume/merge variants.
+	for _, name := range []string{"aider", "gemini", "opencode", "crush", "kimi", "qwen", "copilot", "goose"} {
+		p := mustPreset(name)
+		if len(p.Command) == 0 || len(p.Resume) == 0 || len(p.Merge) == 0 {
+			t.Errorf("preset %q incomplete: %+v", name, p)
+		}
 	}
 }
 
