@@ -96,7 +96,7 @@ var AIToolPresets = []Preset{
 	{
 		Name:        "opencode",
 		Command:     []string{"opencode"},
-		Resume:      []string{"opencode", "run", "--continue"},
+		Resume:      []string{"opencode", "--continue"},
 		Merge:       []string{"opencode", "run"},
 		Description: "OpenCode",
 	},
