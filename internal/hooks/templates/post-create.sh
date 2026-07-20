@@ -12,8 +12,12 @@ echo "🛠  wt post-create hook running in: $ROOT"
 # of the worktree setup. No `set -e` — failures are logged and we move on.
 # (wt itself only warns on post-hook failure; the worktree is already
 # created by the time we run.)
-trap 'rm -f "$WT_HOOK_ERR_FILE"' EXIT INT TERM
+#
+# SECURITY: install commands run dependency lifecycle scripts
+# (postinstall/prepare). If you `wt new` a branch you do not trust, this
+# hook executes that branch's code. Disable the hook for untrusted work.
 WT_HOOK_ERR_FILE=""
+trap 'rm -f "$WT_HOOK_ERR_FILE"' EXIT INT TERM
 
 # JS runtimes / package managers by lockfile priority.
 # Frozen modes never touch the lockfile; if the lockfile is out of sync
@@ -23,11 +27,14 @@ WT_HOOK_ERR_FILE=""
 # has_js_deps reports whether package.json declares any third-party deps.
 # Projects without dependencies (e.g. a bare Chrome extension) would get a
 # useless empty node_modules/ and a newly created lockfile — skip those.
+# Parse failures (missing node, malformed JSON) are treated as "has deps":
+# skipping an install on a parse error would silently leave a real
+# project's dependencies uninstalled.
 has_js_deps() {
-  # No node to parse JSON? Assume deps exist (conservative: still install).
   command -v node >/dev/null 2>&1 || return 0
   node -e '
-    const p = require("./package.json");
+    let p;
+    try { p = require("./package.json"); } catch (e) { process.exit(0); }
     const deps = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
       .some((k) => p[k] && Object.keys(p[k]).length > 0);
     process.exit(deps ? 0 : 1);
@@ -48,6 +55,14 @@ install_js() {
 
 _install_js_body() {
   pkg_dir="$1"
+  # Cap all upward walks at the worktree root: markers above $ROOT belong
+  # to outer projects (a stray ~/pnpm-lock.yaml or a packageManager field
+  # in ~) and must never steer detection or installs out of the worktree.
+  walk_root="${WT_WORKTREE_PATH:-/}"
+  case "$pkg_dir" in
+    "$walk_root"/*|"$walk_root") ;;
+    *) walk_root="/" ;; # called outside a worktree (tests); walk to /
+  esac
   if ! has_js_deps; then
     echo "⏭️   [js] package.json has no dependencies; skipping install"
     return 0
@@ -74,17 +89,19 @@ _install_js_body() {
     [ -n "$root_marker" ] && root_dir="$pkg_dir"
   fi
   dir="$pkg_dir"
-  while [ "$dir" != "/" ]; do
+  while : ; do
     if [ -f "$dir/pnpm-workspace.yaml" ]; then root_marker="pnpm"; root_dir="$dir"; break; fi
+    if [ "$dir" = "$walk_root" ] || [ "$dir" = "/" ]; then break; fi
     dir=$(dirname "$dir")
   done
   lock_dir=""
   dir="$pkg_dir"
-  while [ "$dir" != "/" ]; do
+  while : ; do
     if [ -f "$dir/pnpm-lock.yaml" ]; then pm="pnpm"; lock_dir="$dir"; break; fi
     if [ -f "$dir/yarn.lock" ]; then pm="yarn"; lock_dir="$dir"; break; fi
     if [ -f "$dir/bun.lockb" ] || [ -f "$dir/bun.lock" ]; then pm="bun"; lock_dir="$dir"; break; fi
     if [ -f "$dir/package-lock.json" ] || [ -f "$dir/npm-shrinkwrap.json" ]; then pm="npm"; lock_dir="$dir"; break; fi
+    if [ "$dir" = "$walk_root" ] || [ "$dir" = "/" ]; then break; fi
     dir=$(dirname "$dir")
   done
   # Member of a pnpm workspace whose own lockfile points at a DIFFERENT
@@ -110,6 +127,15 @@ _install_js_body() {
   if [ -z "$pm" ]; then
     pm="$root_marker"
   fi
+  # An inherited pnpm lockfile (from a parent dir, no pnpm-workspace.yaml)
+  # does NOT make this package part of a workspace: installing at the
+  # parent would leave this package's deps uninstalled. Treat it as a
+  # plain no-lockfile package instead.
+  if [ "$pm" = "pnpm" ] && [ -n "$lock_dir" ] && [ "$lock_dir" != "$pkg_dir" ] \
+     && ! { [ -n "$root_dir" ] && [ -f "$root_dir/pnpm-workspace.yaml" ]; }; then
+    pm=""
+    lock_dir=""
+  fi
   # Inside a pnpm workspace the PM is pnpm even for packages that declare
   # no dependencies (has_js_deps may have skipped them already; be safe) —
   # covered by the workspace install and reported via the sentinel.
@@ -127,15 +153,13 @@ _install_js_body() {
     # from it into node_modules. Every worktree's install against the
     # same store is mostly link-creation — dramatically faster than
     # npm ci's fresh extract of every tarball.
-    # If this package sits inside a pnpm workspace, run the install at
-    # the workspace root: pnpm install covers all member projects in one
-    # run (recursive-install defaults to true), and reporting the root
-    # back lets the caller skip the members entirely.
+    # If this package sits inside a pnpm workspace (pnpm-workspace.yaml),
+    # run the install at the workspace root: pnpm install covers all
+    # member projects in one run (recursive-install defaults to true), and
+    # reporting the root back lets the caller skip the members entirely.
     ws_dir=""
     if [ -n "$root_dir" ] && [ -f "$root_dir/pnpm-workspace.yaml" ]; then
       ws_dir="$root_dir"
-    elif [ -n "$lock_dir" ] && [ "$lock_dir" != "$pkg_dir" ]; then
-      ws_dir="$lock_dir"
     fi
     if [ -n "$ws_dir" ]; then
       if [ "$pkg_dir" = "$ws_dir" ]; then
@@ -165,8 +189,17 @@ _install_js_body() {
       return 0
     fi
     # Yarn 2+ (Berry) uses --immutable; Yarn 1 uses --frozen-lockfile.
-    if [ -f ".yarnrc.yml" ]; then
-      echo "📦  [js] yarn install --immutable (yarn.lock + .yarnrc.yml found)"
+    # .yarnrc.yml lives at the workspace root in a monorepo, so check
+    # upward (capped at the worktree root), not just this directory.
+    yarnrc=""
+    dir="$pkg_dir"
+    while : ; do
+      [ -f "$dir/.yarnrc.yml" ] && yarnrc="$dir/.yarnrc.yml" && break
+      if [ "$dir" = "$walk_root" ] || [ "$dir" = "/" ]; then break; fi
+      dir=$(dirname "$dir")
+    done
+    if [ -n "$yarnrc" ]; then
+      echo "📦  [js] yarn install --immutable (yarn.lock + $yarnrc found)"
       yarn install --immutable || {
         echo "⚠️  [js] yarn.lock out of sync with package.json; falling back to yarn install"
         yarn install || echo "⚠️  [js] yarn install failed"
@@ -184,7 +217,7 @@ _install_js_body() {
       echo "⚠️  [js] bun project but bun not installed; skipping"
       return 0
     fi
-    echo "📦  [js] bun install --frozen-lockfile (bun.lockb found)"
+    echo "📦  [js] bun install --frozen-lockfile (bun lockfile found)"
     bun install --frozen-lockfile || {
       echo "⚠️  [js] bun.lockb out of sync with package.json; falling back to bun install"
       bun install || echo "⚠️  [js] bun install failed"
@@ -232,24 +265,45 @@ install_python() {
 }
 
 _install_python_body() {
-  if [ -f "poetry.lock" ] && command -v poetry >/dev/null 2>&1; then
+  # A lockfile for a tool that isn't installed must NOT silently degrade
+  # to a pip venv: the pinned constraints would be ignored entirely and
+  # the resulting environment would not match the lockfile. Warn + skip,
+  # same policy as the JS branches.
+  if [ -f "poetry.lock" ] && ! command -v poetry >/dev/null 2>&1; then
+    echo "⚠️  [py] poetry.lock found but poetry not installed; skipping (NOT falling back to pip — it would ignore the lockfile)"
+    return 0
+  fi
+  if [ -f "uv.lock" ] && ! command -v uv >/dev/null 2>&1; then
+    echo "⚠️  [py] uv.lock found but uv not installed; skipping (NOT falling back to pip)"
+    return 0
+  fi
+  if [ -f "Pipfile.lock" ] && ! command -v pipenv >/dev/null 2>&1; then
+    echo "⚠️  [py] Pipfile.lock found but pipenv not installed; skipping (NOT falling back to pip)"
+    return 0
+  fi
+  if [ -f "poetry.lock" ]; then
     # poetry install is strict when poetry.lock exists; it never updates it.
     echo "🐍  [py] poetry install (poetry.lock found)"
     poetry install || echo "⚠️  [py] poetry install failed"
-  elif [ -f "uv.lock" ] && command -v uv >/dev/null 2>&1; then
+  elif [ -f "uv.lock" ]; then
     # --locked: fail if uv.lock is out of sync with pyproject.toml.
     echo "🐍  [py] uv sync --locked (uv.lock found)"
     uv sync --locked || {
       echo "⚠️  [py] uv.lock out of sync with pyproject.toml; falling back to uv sync"
       uv sync || echo "⚠️  [py] uv sync failed"
     }
-  elif [ -f "Pipfile.lock" ] && command -v pipenv >/dev/null 2>&1; then
+  elif [ -f "Pipfile.lock" ]; then
     # --deploy: fail if Pipfile.lock is out of date; never regenerates it.
     echo "🐍  [py] pipenv install --dev --deploy (Pipfile.lock found)"
     pipenv install --dev --deploy || {
       echo "⚠️  [py] Pipfile.lock out of sync with Pipfile; falling back to pipenv install --dev"
       pipenv install --dev || echo "⚠️  [py] pipenv install failed"
     }
+  elif [ ! -f "requirements.txt" ]; then
+    # Only a pyproject.toml (or bare Pipfile): don't create an empty venv
+    # and hit the network for nothing — same "no deps, skip" policy as JS.
+    echo "⏭️   [py] no requirements.txt; skipping venv setup"
+    return 0
   else
     if ! command -v python3 >/dev/null 2>&1; then
       echo "⚠️  [py] python3 not available; skipping"
@@ -266,9 +320,7 @@ _install_python_body() {
     fi
     echo "🐍  [py] installing requirements into .venv"
     .venv/bin/python -m pip install --upgrade pip || echo "⚠️  [py] pip upgrade failed (offline?); continuing"
-    if [ -f "requirements.txt" ]; then
-      .venv/bin/pip install -r requirements.txt || echo "⚠️  [py] pip install -r requirements.txt failed"
-    fi
+    .venv/bin/pip install -r requirements.txt || echo "⚠️  [py] pip install -r requirements.txt failed"
   fi
 }
 
@@ -299,7 +351,7 @@ scan_projects() {
   # whose workspace root was already installed are skipped — find's
   # traversal order is arbitrary, so we sort by depth instead of relying
   # on it. The depth prefix is tab-separated so paths with spaces survive.
-  find "$search_root" -maxdepth 3 \( -name node_modules -o -name .git \) -prune \
+  find "$search_root" -maxdepth 3 \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .next -o -name coverage -o -name .venv \) -prune \
     -o -name "package.json" -print 2>/dev/null \
     | awk -F/ '{printf "%d\t%s\n", NF, $0}' | sort -n | cut -f2- \
     | while IFS= read -r marker; do
@@ -330,33 +382,39 @@ EOF
   done
 
   # Go. `go mod download` never modifies go.mod/go.sum.
-  find "$search_root" -maxdepth 3 \( -name node_modules -o -name .git \) -prune \
-    -o -name "go.mod" -print 2>/dev/null | while IFS= read -r marker; do
-    echo "🐹  [go] go mod download ($marker)"
-    (cd "$(dirname "$marker")" && go mod download) || echo "⚠️  [go] go mod download failed ($(dirname "$marker"))"
-  done
+  if command -v go >/dev/null 2>&1; then
+    find "$search_root" -maxdepth 3 \( -name node_modules -o -name .git \) -prune \
+      -o -name "go.mod" -print 2>/dev/null | while IFS= read -r marker; do
+      echo "🐹  [go] go mod download ($marker)"
+      (cd "$(dirname "$marker")" && go mod download) || echo "⚠️  [go] go mod download failed ($(dirname "$marker"))"
+    done
+  fi
 
   # Rust. --locked asserts Cargo.lock is up to date; fall back if stale.
-  find "$search_root" -maxdepth 3 \( -name target -o -name .git \) -prune \
-    -o -name "Cargo.toml" -print 2>/dev/null | while IFS= read -r marker; do
-    echo "🦀  [rust] cargo fetch --locked ($marker)"
-    (cd "$(dirname "$marker")" && cargo fetch --locked) || {
-      echo "⚠️  [rust] Cargo.lock out of sync with Cargo.toml; falling back to cargo fetch"
-      (cd "$(dirname "$marker")" && cargo fetch) || echo "⚠️  [rust] cargo fetch failed ($(dirname "$marker"))"
-    }
-  done
+  if command -v cargo >/dev/null 2>&1; then
+    find "$search_root" -maxdepth 3 \( -name target -o -name .git \) -prune \
+      -o -name "Cargo.toml" -print 2>/dev/null | while IFS= read -r marker; do
+      echo "🦀  [rust] cargo fetch --locked ($marker)"
+      (cd "$(dirname "$marker")" && cargo fetch --locked) || {
+        echo "⚠️  [rust] Cargo.lock out of sync with Cargo.toml; falling back to cargo fetch"
+        (cd "$(dirname "$marker")" && cargo fetch) || echo "⚠️  [rust] cargo fetch failed ($(dirname "$marker"))"
+      }
+    done
+  fi
 
   # Swift / iOS / macOS.
   #
   # SPM: resolve per Package.swift, skipping nested checkouts (.build) and
   # vendored sources (Sources). Package.resolved pins exact versions;
   # resolve never rewrites it unless requirements changed.
-  find "$search_root" -maxdepth 4 \( -name .build -o -name .git \) -prune \
-    -o -name "Package.swift" -not -path "*/Sources/*" -print 2>/dev/null | while IFS= read -r marker; do
-    dir=$(dirname "$marker")
-    echo "🐦  [swift] swift package resolve ($dir)"
-    (cd "$dir" && swift package resolve) || echo "⚠️  [swift] swift package resolve failed ($dir)"
-  done
+  if command -v swift >/dev/null 2>&1; then
+    find "$search_root" -maxdepth 4 \( -name .build -o -name .git \) -prune \
+      -o -name "Package.swift" -not -path "*/Sources/*" -print 2>/dev/null | while IFS= read -r marker; do
+      dir=$(dirname "$marker")
+      echo "🐦  [swift] swift package resolve ($dir)"
+      (cd "$dir" && swift package resolve) || echo "⚠️  [swift] swift package resolve failed ($dir)"
+    done
+  fi
 
   # Ruby. Runs BEFORE CocoaPods: a Gemfile that pins the cocoapods gem is
   # the standard iOS setup, and `bundle exec pod` below needs that gem
@@ -409,11 +467,13 @@ EOF
   # which pins the Gradle version; use system gradle only as a fallback.
   # `gradle help` resolves the build's plugins + dependencies without
   # compiling. Skip subprojects (they have no settings.gradle and would
-  # resolve the whole build again).
+  # resolve the whole build again) — but a dir with its own wrapper is
+  # always a root, and single-project builds may have no settings.gradle
+  # at all.
   find "$search_root" -maxdepth 3 \( -name build -o -name .git -o -name node_modules \) -prune \
     -o \( -name "build.gradle" -o -name "build.gradle.kts" \) -print 2>/dev/null | while IFS= read -r marker; do
     dir=$(dirname "$marker")
-    if [ ! -f "$dir/settings.gradle" ] && [ ! -f "$dir/settings.gradle.kts" ] && [ ! -x "$dir/gradlew" ]; then
+    if [ ! -f "$dir/settings.gradle" ] && [ ! -f "$dir/settings.gradle.kts" ] && [ ! -f "$dir/gradlew" ]; then
       continue  # subproject; the root build covers it
     fi
     echo "🐘  [gradle] resolving dependencies ($dir)"
@@ -454,15 +514,28 @@ EOF
   done
 
   # .NET. Restore at the solution level when one exists (covers all
-  # projects), otherwise per-project. --locked-mode asserts the lock file.
+  # projects), otherwise per-project. --locked-mode asserts the lock file
+  # but fails outright when the project has no packages.lock.json, so only
+  # pass it when one exists. Skip .csproj/.fsproj in dirs that have a
+  # .sln — the solution restore already covers them.
   find "$search_root" -maxdepth 3 \( -name bin -o -name obj -o -name .git \) -prune \
     -o \( -name "*.sln" -o -name "*.csproj" -o -name "*.fsproj" \) -print 2>/dev/null | while IFS= read -r marker; do
     dir=$(dirname "$marker")
+    case "$marker" in
+      *.csproj|*.fsproj)
+        if ls "$dir"/*.sln >/dev/null 2>&1; then
+          continue  # covered by the solution restore
+        fi
+        ;;
+    esac
     if command -v dotnet >/dev/null 2>&1; then
-      echo "🔷  [.net] dotnet restore ($marker)"
-      (cd "$dir" && dotnet restore "$marker" --locked-mode 2>/dev/null) || \
-        (cd "$dir" && dotnet restore "$marker") || \
-        echo "⚠️  [.net] dotnet restore failed ($marker)"
+      if ls "$dir"/packages.lock.json "$dir"/*/packages.lock.json >/dev/null 2>&1; then
+        echo "🔷  [.net] dotnet restore --locked-mode ($marker)"
+        (cd "$dir" && dotnet restore "$marker" --locked-mode) || echo "⚠️  [.net] dotnet restore failed ($marker)"
+      else
+        echo "🔷  [.net] dotnet restore ($marker)"
+        (cd "$dir" && dotnet restore "$marker") || echo "⚠️  [.net] dotnet restore failed ($marker)"
+      fi
     else
       echo "⚠️  [.net] $marker found but dotnet not available"
     fi
