@@ -33,8 +33,8 @@ func TestInitCreatesScriptAndRegistersHook(t *testing.T) {
 	if !strings.HasPrefix(string(data), "#!/bin/sh\n") {
 		t.Error("script missing shebang")
 	}
-	if !strings.Contains(string(data), `not -path "*/node_modules/*"`) {
-		t.Error("script must skip package.json under node_modules")
+	if !strings.Contains(string(data), `-name node_modules -o -name .git`) {
+		t.Error("script must prune node_modules when scanning for package.json")
 	}
 
 	// The template must handle every ecosystem it advertises.
