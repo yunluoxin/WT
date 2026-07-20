@@ -1,5 +1,5 @@
 // Package aitool resolves the effective AI tool commands (launch, resume,
-// merge) from config, presets and environment overrides.
+// exec) from config, presets and environment overrides.
 package aitool
 
 import (
@@ -9,7 +9,7 @@ import (
 	"wt/internal/config"
 )
 
-// promptPlaceholder marks where the merge prompt goes inside merge args.
+// promptPlaceholder marks where the prompt goes inside exec args.
 const promptPlaceholder = "{prompt}"
 
 // envOverride resolves a WT_* env override to argv. If the value matches a
@@ -40,11 +40,11 @@ func resumeVariant(p config.Preset) []string {
 	return append(append([]string{}, p.Command...), "--resume")
 }
 
-// mergeVariant picks the merge command of a preset, falling back to the
+// execVariant picks the headless exec command of a preset, falling back to the
 // launch command (the prompt is appended later by applyPrompt).
-func mergeVariant(p config.Preset) []string {
-	if len(p.Merge) > 0 {
-		return p.Merge
+func execVariant(p config.Preset) []string {
+	if len(p.Exec) > 0 {
+		return p.Exec
 	}
 	return p.Command
 }
@@ -96,12 +96,12 @@ func ResumeCommand(cfg map[string]any) []string {
 	return append(base, "--resume")
 }
 
-// MergeCommand builds the command used for --ai conflict resolution, with
+// ExecCommand builds the command used for --ai conflict resolution, with
 // the prompt placed at the {prompt} placeholder or appended at the end.
-// Priority: WT_AI_TOOL_MERGE > WT_AI_TOOL (preset-expanded) >
-// config ai_tool.merge_command+merge_args > preset inference > base+prompt.
-func MergeCommand(cfg map[string]any, prompt string) []string {
-	if env := envOverride("WT_AI_TOOL_MERGE", mergeVariant); env != nil {
+// Priority: WT_AI_TOOL_EXEC > WT_AI_TOOL (preset-expanded) >
+// config ai_tool.exec_command+exec_args > preset inference > base+prompt.
+func ExecCommand(cfg map[string]any, prompt string) []string {
+	if env := envOverride("WT_AI_TOOL_EXEC", execVariant); env != nil {
 		return applyPrompt(env, prompt)
 	}
 	if env := envCommand(); env != nil {
@@ -110,13 +110,13 @@ func MergeCommand(cfg map[string]any, prompt string) []string {
 		}
 		base := env
 		if preset := config.PresetNameForCommand(env); preset != "" {
-			if p, ok := config.FindPreset(preset); ok && len(p.Merge) > 0 {
-				base = append([]string{}, p.Merge...)
+			if p, ok := config.FindPreset(preset); ok && len(p.Exec) > 0 {
+				base = append([]string{}, p.Exec...)
 			}
 		}
 		return applyPrompt(base, prompt)
 	}
-	if cmd := configVariant(cfg, "merge_command", "merge_args"); len(cmd) > 0 {
+	if cmd := configVariant(cfg, "exec_command", "exec_args"); len(cmd) > 0 {
 		return applyPrompt(cmd, prompt)
 	}
 	base := EffectiveCommand(cfg)
@@ -124,17 +124,17 @@ func MergeCommand(cfg map[string]any, prompt string) []string {
 		return base
 	}
 	if preset := config.PresetNameForCommand(base); preset != "" {
-		if p, ok := config.FindPreset(preset); ok && len(p.Merge) > 0 {
-			base = append([]string{}, p.Merge...)
+		if p, ok := config.FindPreset(preset); ok && len(p.Exec) > 0 {
+			base = append([]string{}, p.Exec...)
 		}
 	}
 	return applyPrompt(base, prompt)
 }
 
-// MergeUsesStdin reports whether the merge prompt should be fed to the
-// command via stdin instead of appended to argv (ai_tool.merge_stdin).
-func MergeUsesStdin(cfg map[string]any) bool {
-	return config.GetBool(cfg, "ai_tool.merge_stdin")
+// ExecUsesStdin reports whether the exec prompt should be fed to the
+// command via stdin instead of appended to argv (ai_tool.exec_stdin).
+func ExecUsesStdin(cfg map[string]any) bool {
+	return config.GetBool(cfg, "ai_tool.exec_stdin")
 }
 
 // applyPrompt inserts the prompt into argv: the first element containing
@@ -151,8 +151,8 @@ func applyPrompt(argv []string, prompt string) []string {
 	return append(argv, prompt)
 }
 
-// configVariant reads an ai_tool command+args pair (e.g. merge_command /
-// merge_args). When the command is empty but args are set, the args extend
+// configVariant reads an ai_tool command+args pair (e.g. exec_command /
+// exec_args). When the command is empty but args are set, the args extend
 // the launch command instead.
 func configVariant(cfg map[string]any, cmdKey, argsKey string) []string {
 	cmd := config.GetString(cfg, "ai_tool."+cmdKey)
@@ -163,7 +163,7 @@ func configVariant(cfg map[string]any, cmdKey, argsKey string) []string {
 	if cmdKey == "command" || len(args) == 0 {
 		return args
 	}
-	// merge_args / resume_args without a command extend the launch command.
+	// exec_args / resume_args without a command extend the launch command.
 	base := configVariant(cfg, "command", "args")
 	if len(base) == 0 {
 		return nil

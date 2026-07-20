@@ -184,25 +184,25 @@ func TestPresetVariants(t *testing.T) {
 
 	assertArgv("claude resume", mustPreset("claude").Resume, []string{"claude", "--continue"})
 	assertArgv("codex resume", mustPreset("codex").Resume, []string{"codex", "resume", "--last"})
-	assertArgv("codex merge", mustPreset("codex").Merge, []string{"codex", "exec"})
-	assertArgv("claude-remote merge", mustPreset("claude-remote").Merge,
+	assertArgv("codex exec", mustPreset("codex").Exec, []string{"codex", "exec"})
+	assertArgv("claude-remote exec", mustPreset("claude-remote").Exec,
 		[]string{"claude", "--print", "--tools=default"})
 
 	// cursor-agent presets.
 	assertArgv("cursor-agent resume", mustPreset("cursor-agent").Resume, []string{"cursor-agent", "resume"})
-	assertArgv("cursor-agent merge", mustPreset("cursor-agent").Merge,
+	assertArgv("cursor-agent exec", mustPreset("cursor-agent").Exec,
 		[]string{"cursor-agent", "--print", "--trust", "--force"})
-	// The yolo merge invocation must not duplicate --force from the launch command.
-	assertArgv("cursor-agent-yolo merge", mustPreset("cursor-agent-yolo").Merge,
+	// The yolo exec invocation must not duplicate --force from the launch command.
+	assertArgv("cursor-agent-yolo exec", mustPreset("cursor-agent-yolo").Exec,
 		[]string{"cursor-agent", "--print", "--trust", "--force"})
 	if got := PresetNameForCommand([]string{"cursor-agent"}); got != "cursor-agent" {
 		t.Errorf("PresetNameForCommand(cursor-agent) = %q", got)
 	}
 
-	// Newly added community presets all define launch/resume/merge variants.
+	// Newly added community presets all define launch/resume/exec variants.
 	for _, name := range []string{"aider", "gemini", "opencode", "crush", "kimi", "qwen", "copilot", "goose"} {
 		p := mustPreset(name)
-		if len(p.Command) == 0 || len(p.Resume) == 0 || len(p.Merge) == 0 {
+		if len(p.Command) == 0 || len(p.Resume) == 0 || len(p.Exec) == 0 {
 			t.Errorf("preset %q incomplete: %+v", name, p)
 		}
 	}

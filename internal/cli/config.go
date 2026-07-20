@@ -49,9 +49,9 @@ func configShowCmd() *cobra.Command {
 				if len(resumeCmd) > 0 {
 					termenv.Info("  resume: %s", strings.Join(resumeCmd, " "))
 				}
-				mergeCmd := aitool.MergeCommand(cfg, "<prompt>")
-				if len(mergeCmd) > 0 {
-					termenv.Info("  merge:  %s", strings.Join(mergeCmd, " "))
+				execCmd := aitool.ExecCommand(cfg, "<prompt>")
+				if len(execCmd) > 0 {
+					termenv.Info("  exec:   %s", strings.Join(execCmd, " "))
 				}
 			}
 			if preset := config.PresetNameForCommand(aiCmd); preset != "" {
@@ -88,7 +88,7 @@ func configSetCmd() *cobra.Command {
 		Long: `Set a configuration value. Examples:
 
   wt config set ai-tool.name "claude --dangerously-skip-permissions"
-  wt config set ai-tool.merge "codex exec {prompt}"
+  wt config set ai-tool.exec "codex exec {prompt}"
   wt config set ai-tool.resume "codex resume --last"
   wt config set launch.method tmux
   wt config set launch.session_prefix wt
@@ -96,10 +96,11 @@ func configSetCmd() *cobra.Command {
 
 The ai-tool.* keys take a full command line split on whitespace:
   ai-tool.name    launch command (alias: ai-tool)
-  ai-tool.merge   merge command for --ai conflict resolution; use {prompt}
-                  where the prompt goes (appended at the end if omitted)
+  ai-tool.exec    headless one-shot command for --ai conflict resolution
+                  (rebase/stash); use {prompt} where the prompt goes
+                  (appended at the end if omitted)
   ai-tool.resume  resume command for continuing a previous session
-Empty values for ai-tool.merge/ai-tool.resume clear the override and
+Empty values for ai-tool.exec/ai-tool.resume clear the override and
 restore preset inference.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,8 +114,8 @@ restore preset inference.`,
 				if err := setAIToolVariant(cfg, value, "command", "args", true); err != nil {
 					return err
 				}
-			case "ai-tool.merge":
-				if err := setAIToolVariant(cfg, value, "merge_command", "merge_args", false); err != nil {
+			case "ai-tool.exec":
+				if err := setAIToolVariant(cfg, value, "exec_command", "exec_args", false); err != nil {
 					return err
 				}
 			case "ai-tool.resume":
@@ -199,7 +200,7 @@ func configUsePresetCmd() *cobra.Command {
 			}
 			setAIToolPair(cfg, "command", "args", preset.Command)
 			setAIToolPair(cfg, "resume_command", "resume_args", preset.Resume)
-			setAIToolPair(cfg, "merge_command", "merge_args", preset.Merge)
+			setAIToolPair(cfg, "exec_command", "exec_args", preset.Exec)
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
@@ -230,8 +231,8 @@ func configListPresetsCmd() *cobra.Command {
 				if len(p.Resume) > 0 {
 					termenv.Info("  %-20s %s", "", termenv.Dim("resume: "+strings.Join(p.Resume, " ")))
 				}
-				if len(p.Merge) > 0 {
-					termenv.Info("  %-20s %s", "", termenv.Dim("merge:  "+strings.Join(p.Merge, " ")+" <prompt>"))
+				if len(p.Exec) > 0 {
+					termenv.Info("  %-20s %s", "", termenv.Dim("exec:   "+strings.Join(p.Exec, " ")+" <prompt>"))
 				}
 			}
 			fmt.Println()

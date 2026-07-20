@@ -67,33 +67,33 @@ func TestResumeCommandEnv(t *testing.T) {
 	}
 }
 
-func TestMergeCommand(t *testing.T) {
+func TestExecCommand(t *testing.T) {
 	testutil.SetHome(t)
 	unsetEnv(t, "WT_AI_TOOL")
 	cfg := loadCfg(t)
-	got := MergeCommand(cfg, "fix conflicts")
+	got := ExecCommand(cfg, "fix conflicts")
 	want := []string{"claude", "--print", "--tools=default", "fix conflicts"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
-func TestMergeCommandRemoteStripsFlag(t *testing.T) {
+func TestExecCommandRemoteStripsFlag(t *testing.T) {
 	testutil.SetHome(t)
 	unsetEnv(t, "WT_AI_TOOL")
 	cfg := loadCfg(t)
 	// Configure claude-remote preset.
 	cfg["ai_tool"] = map[string]any{"command": "claude", "args": []any{"/remote-control"}}
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"claude", "--print", "--tools=default", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
 // WT_AI_TOOL set to a preset NAME expands to that preset's command, so the
 // preset resume/merge variants apply (e.g. cursor-agent-yolo --force and its
-// --print --trust --force merge invocation).
+// --print --trust --force exec invocation).
 func TestEnvPresetNameExpands(t *testing.T) {
 	testutil.SetHome(t)
 	t.Setenv("WT_AI_TOOL", "cursor-agent-yolo")
@@ -105,36 +105,36 @@ func TestEnvPresetNameExpands(t *testing.T) {
 	if got := ResumeCommand(cfg); !equal(got, []string{"cursor-agent", "--force", "resume"}) {
 		t.Errorf("ResumeCommand = %v, want [cursor-agent --force resume]", got)
 	}
-	got := MergeCommand(cfg, "fix conflicts")
+	got := ExecCommand(cfg, "fix conflicts")
 	want := []string{"cursor-agent", "--print", "--trust", "--force", "fix conflicts"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
 // A preset name that is also a plain command (claude) still expands via the
-// preset table, picking up the merge flags.
+// preset table, picking up the exec flags.
 func TestEnvPresetNameClaude(t *testing.T) {
 	testutil.SetHome(t)
 	t.Setenv("WT_AI_TOOL", "claude")
 	cfg := loadCfg(t)
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"claude", "--print", "--tools=default", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
 // A non-preset WT_AI_TOOL value is still split verbatim and does not gain
-// preset merge flags.
+// preset exec flags.
 func TestEnvNonPresetUnchanged(t *testing.T) {
 	testutil.SetHome(t)
 	t.Setenv("WT_AI_TOOL", "myai --fast")
 	cfg := loadCfg(t)
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"myai", "--fast", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
@@ -165,39 +165,39 @@ func TestApplyPrompt(t *testing.T) {
 	}
 }
 
-// Explicit ai_tool.merge_command/merge_args in config win over preset
+// Explicit ai_tool.exec_command/exec_args in config win over preset
 // inference, and {prompt} is substituted.
-func TestMergeCommandFromConfig(t *testing.T) {
+func TestExecCommandFromConfig(t *testing.T) {
 	testutil.SetHome(t)
 	unsetEnv(t, "WT_AI_TOOL")
 	cfg := loadCfg(t)
 	cfg["ai_tool"] = map[string]any{
-		"command":       "claude",
-		"args":          []any{},
-		"merge_command": "aider",
-		"merge_args":    []any{"--yes-always", "--message", "{prompt}"},
+		"command":      "claude",
+		"args":         []any{},
+		"exec_command": "aider",
+		"exec_args":    []any{"--yes-always", "--message", "{prompt}"},
 	}
-	got := MergeCommand(cfg, "fix conflicts")
+	got := ExecCommand(cfg, "fix conflicts")
 	want := []string{"aider", "--yes-always", "--message", "fix conflicts"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
-// merge_args without merge_command extend the launch command.
-func TestMergeCommandArgsExtendLaunch(t *testing.T) {
+// exec_args without exec_command extend the launch command.
+func TestExecCommandArgsExtendLaunch(t *testing.T) {
 	testutil.SetHome(t)
 	unsetEnv(t, "WT_AI_TOOL")
 	cfg := loadCfg(t)
 	cfg["ai_tool"] = map[string]any{
-		"command":    "gemini",
-		"args":       []any{},
-		"merge_args": []any{"-p", "{prompt}"},
+		"command":   "gemini",
+		"args":      []any{},
+		"exec_args": []any{"-p", "{prompt}"},
 	}
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"gemini", "-p", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
@@ -220,30 +220,30 @@ func TestResumeCommandFromConfig(t *testing.T) {
 	}
 }
 
-// WT_AI_TOOL_MERGE overrides everything for the merge variant.
-func TestMergeCommandEnvOverride(t *testing.T) {
+// WT_AI_TOOL_EXEC overrides everything for the merge variant.
+func TestExecCommandEnvOverride(t *testing.T) {
 	testutil.SetHome(t)
 	t.Setenv("WT_AI_TOOL", "claude")
-	t.Setenv("WT_AI_TOOL_MERGE", "opencode run {prompt}")
+	t.Setenv("WT_AI_TOOL_EXEC", "opencode run {prompt}")
 	cfg := loadCfg(t)
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"opencode", "run", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
-// WT_AI_TOOL_MERGE set to a preset name expands to that preset's merge
+// WT_AI_TOOL_EXEC set to a preset name expands to that preset's merge
 // command.
-func TestMergeCommandEnvPresetName(t *testing.T) {
+func TestExecCommandEnvPresetName(t *testing.T) {
 	testutil.SetHome(t)
 	t.Setenv("WT_AI_TOOL", "claude")
-	t.Setenv("WT_AI_TOOL_MERGE", "codex")
+	t.Setenv("WT_AI_TOOL_EXEC", "codex")
 	cfg := loadCfg(t)
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"codex", "exec", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
@@ -262,26 +262,26 @@ func TestResumeCommandEnvOverride(t *testing.T) {
 
 // codex preset merges via `codex exec <prompt>` (the old --non-interactive
 // flag does not exist on current codex).
-func TestMergeCommandCodexPreset(t *testing.T) {
+func TestExecCommandCodexPreset(t *testing.T) {
 	testutil.SetHome(t)
 	t.Setenv("WT_AI_TOOL", "codex")
 	cfg := loadCfg(t)
-	got := MergeCommand(cfg, "fix")
+	got := ExecCommand(cfg, "fix")
 	want := []string{"codex", "exec", "fix"}
 	if !equal(got, want) {
-		t.Errorf("MergeCommand = %v, want %v", got, want)
+		t.Errorf("ExecCommand = %v, want %v", got, want)
 	}
 }
 
-func TestMergeUsesStdin(t *testing.T) {
+func TestExecUsesStdin(t *testing.T) {
 	testutil.SetHome(t)
 	cfg := loadCfg(t)
-	if MergeUsesStdin(cfg) {
-		t.Error("merge_stdin should default to false")
+	if ExecUsesStdin(cfg) {
+		t.Error("exec_stdin should default to false")
 	}
-	cfg["ai_tool"] = map[string]any{"command": "gemini", "merge_stdin": true}
-	if !MergeUsesStdin(cfg) {
-		t.Error("merge_stdin = true not picked up")
+	cfg["ai_tool"] = map[string]any{"command": "gemini", "exec_stdin": true}
+	if !ExecUsesStdin(cfg) {
+		t.Error("exec_stdin = true not picked up")
 	}
 }
 

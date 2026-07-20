@@ -296,23 +296,23 @@ Subcommands:
 
 === Setting your AI tool ===
 Two ways:
-  1. Custom command — use the special keys 'ai-tool.name' / 'ai-tool.merge' /
+  1. Custom command — use the special keys 'ai-tool.name' / 'ai-tool.exec' /
      'ai-tool.resume' (with DASHES, not dots; 'ai-tool' alone is an alias
      for ai-tool.name). The value is split on whitespace into command+args:
        wt config set ai-tool.name "claude --dangerously-skip-permissions"
        wt config set ai-tool.name "aider --model sonnet"
-       wt config set ai-tool.merge "aider --yes-always --message {prompt}"
-       wt config set ai-tool.merge "codex exec"          # prompt appended
+       wt config set ai-tool.exec "aider --yes-always --message {prompt}"
+       wt config set ai-tool.exec "codex exec"           # prompt appended
        wt config set ai-tool.resume "aider --restore-chat-history"
-     In ai-tool.merge, {prompt} marks where the conflict-resolution prompt
-     goes; without it the prompt is appended as the final argument. Setting
-     ai-tool.merge / ai-tool.resume to an empty value clears the override
-     and restores preset inference. The ai_tool.merge_stdin config key
-     (true/false, via 'wt config set ai_tool.merge_stdin true') makes the
-     merge prompt arrive on stdin instead of argv.
+     In ai-tool.exec, {prompt} marks where the prompt goes; without it the
+     prompt is appended as the final argument. Setting
+     ai-tool.exec / ai-tool.resume to an empty value clears the override
+     and restores preset inference. The ai_tool.exec_stdin config key
+     (true/false, via 'wt config set ai_tool.exec_stdin true') makes the
+     exec prompt arrive on stdin instead of argv.
      To disable AI launching entirely: wt config use-preset no-op
   2. Built-in preset — <name> must be one of exactly (each preset sets
-     launch + resume + merge together):
+     launch + resume + exec together):
        no-op                (none)                                   disable launching
        claude               claude                                    Claude Code (default)
        claude-yolo          claude --dangerously-skip-permissions
@@ -337,12 +337,14 @@ Two ways:
                                      command. Empty value is rejected — use
                                      'use-preset no-op' to disable instead.
   ai-tool "<cmd> [args...]"          alias of ai-tool.name
-  ai-tool.merge "<cmd> [args...]"    merge (conflict-resolution) command;
-                                     {prompt} placeholder supported, empty
-                                     value clears the override
+  ai-tool.exec "<cmd> [args...]"     headless one-shot command used for
+                                     --ai conflict resolution (rebase and
+                                     stash pop); {prompt} placeholder
+                                     supported, empty value clears the
+                                     override
   ai-tool.resume "<cmd> [args...]"   resume command; empty value clears
                                      the override
-  ai_tool.merge_stdin <true|false>   feed the merge prompt via stdin
+  ai_tool.exec_stdin <true|false>    feed the exec prompt via stdin
                                      instead of argv (default false)
   launch.method <method>             default launch method for 'wt new' and
                                      'wt resume'; same enum as -T/--term:
@@ -368,7 +370,7 @@ only the keys above have an effect.
   WT_AI_TOOL="<cmd> [args...]"   overrides the AI tool launch command;
                                  empty string disables; a preset name
                                  expands to that preset
-  WT_AI_TOOL_MERGE="<cmd>..."    overrides the merge command ({prompt}
+  WT_AI_TOOL_EXEC="<cmd>..."     overrides the exec command ({prompt}
                                  placeholder supported)
   WT_AI_TOOL_RESUME="<cmd>..."   overrides the resume command
   WT_LAUNCH_METHOD=<method>      overrides launch.method

@@ -48,9 +48,9 @@ func TestWithEnvOverrides(t *testing.T) {
 	}
 
 	t.Setenv("WT_AI_TOOL", "codex")
-	t.Setenv("WT_AI_TOOL_MERGE", "opencode run {prompt}")
+	t.Setenv("WT_AI_TOOL_EXEC", "opencode run {prompt}")
 	got := withEnvOverrides("claude --continue")
-	want := "env WT_AI_TOOL=codex WT_AI_TOOL_MERGE='opencode run {prompt}' claude --continue"
+	want := "env WT_AI_TOOL=codex WT_AI_TOOL_EXEC='opencode run {prompt}' claude --continue"
 	if got != want {
 		t.Errorf("withEnvOverrides = %q, want %q", got, want)
 	}

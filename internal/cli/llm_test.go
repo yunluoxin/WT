@@ -110,12 +110,12 @@ func TestLLMConfigSnippetDocumentsSetKeys(t *testing.T) {
 	snippet := specFor(t, "config")
 	for _, want := range []string{
 		// How to set a custom AI tool — the keys have dashes, not dots.
-		"ai-tool", "ai-tool.name", "ai-tool.merge", "ai-tool.resume",
+		"ai-tool", "ai-tool.name", "ai-tool.exec", "ai-tool.resume",
 		"{prompt}",
 		"launch.method", "launch.session_prefix",
 		"git.default_base_branch", "session.auto_resume",
 		// Env overrides.
-		"WT_AI_TOOL", "WT_AI_TOOL_MERGE", "WT_AI_TOOL_RESUME",
+		"WT_AI_TOOL", "WT_AI_TOOL_EXEC", "WT_AI_TOOL_RESUME",
 		"WT_LAUNCH_METHOD", "WT_AUTO_RESUME",
 		// Subcommands.
 		"config show", "config set", "use-preset", "list-presets", "config reset",

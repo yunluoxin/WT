@@ -1,13 +1,13 @@
 package config
 
 // Preset describes an AI tool preset: the launch command plus the resume
-// and merge invocation variants, all as argv.
+// and exec invocation variants, all as argv.
 type Preset struct {
 	Name        string
 	Command     []string // launch (interactive)
 	Resume      []string // full resume command; empty = append "--resume" to Command
-	Merge       []string // full merge command (prompt appended); empty = Command + prompt
-	MergeStdin  bool     // merge prompt is fed via stdin instead of argv
+	Exec        []string // full headless one-shot command (prompt appended); empty = Command + prompt
+	ExecStdin   bool     // exec prompt is fed via stdin instead of argv
 	Description string
 }
 
@@ -20,42 +20,42 @@ var AIToolPresets = []Preset{
 		Name:        "claude",
 		Command:     []string{"claude"},
 		Resume:      []string{"claude", "--continue"},
-		Merge:       []string{"claude", "--print", "--tools=default"},
+		Exec:        []string{"claude", "--print", "--tools=default"},
 		Description: "Claude Code (default)",
 	},
 	{
 		Name:        "claude-yolo",
 		Command:     []string{"claude", "--dangerously-skip-permissions"},
 		Resume:      []string{"claude", "--dangerously-skip-permissions", "--continue"},
-		Merge:       []string{"claude", "--print", "--tools=default"},
+		Exec:        []string{"claude", "--print", "--tools=default"},
 		Description: "Claude Code, skip permissions",
 	},
 	{
 		Name:        "claude-remote",
 		Command:     []string{"claude", "/remote-control"},
 		Resume:      []string{"claude", "--continue", "/remote-control"},
-		Merge:       []string{"claude", "--print", "--tools=default"},
+		Exec:        []string{"claude", "--print", "--tools=default"},
 		Description: "Claude Code with remote control",
 	},
 	{
 		Name:        "claude-yolo-remote",
 		Command:     []string{"claude", "--dangerously-skip-permissions", "/remote-control"},
 		Resume:      []string{"claude", "--dangerously-skip-permissions", "--continue", "/remote-control"},
-		Merge:       []string{"claude", "--dangerously-skip-permissions", "--print", "--tools=default"},
+		Exec:        []string{"claude", "--dangerously-skip-permissions", "--print", "--tools=default"},
 		Description: "Claude Code remote + skip permissions",
 	},
 	{
 		Name:        "codex",
 		Command:     []string{"codex"},
 		Resume:      []string{"codex", "resume", "--last"},
-		Merge:       []string{"codex", "exec"},
+		Exec:        []string{"codex", "exec"},
 		Description: "OpenAI Codex",
 	},
 	{
 		Name:        "codex-yolo",
 		Command:     []string{"codex", "--dangerously-bypass-approvals-and-sandbox"},
 		Resume:      []string{"codex", "resume", "--dangerously-bypass-approvals-and-sandbox", "--last"},
-		Merge:       []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"},
+		Exec:        []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"},
 		Description: "Codex, bypass approvals and sandbox",
 	},
 	{
@@ -66,7 +66,7 @@ var AIToolPresets = []Preset{
 		// workspace-trust prompt that only appears in headless mode and would
 		// otherwise block the run; --force auto-allows the shell commands the
 		// agent runs to resolve conflicts.
-		Merge:       []string{"cursor-agent", "--print", "--trust", "--force"},
+		Exec:        []string{"cursor-agent", "--print", "--trust", "--force"},
 		Description: "Cursor Agent CLI",
 	},
 	{
@@ -76,63 +76,63 @@ var AIToolPresets = []Preset{
 		// The yolo launch command already carries --force; the merge
 		// invocation restarts from the plain binary so it is not
 		// "--force --print --trust --force".
-		Merge:       []string{"cursor-agent", "--print", "--trust", "--force"},
+		Exec:        []string{"cursor-agent", "--print", "--trust", "--force"},
 		Description: "Cursor Agent, auto-allow commands",
 	},
 	{
 		Name:        "aider",
 		Command:     []string{"aider"},
 		Resume:      []string{"aider", "--restore-chat-history"},
-		Merge:       []string{"aider", "--message"},
+		Exec:        []string{"aider", "--message"},
 		Description: "Aider",
 	},
 	{
 		Name:        "gemini",
 		Command:     []string{"gemini"},
 		Resume:      []string{"gemini", "-r", "latest"},
-		Merge:       []string{"gemini", "-p"},
+		Exec:        []string{"gemini", "-p"},
 		Description: "Google Gemini CLI",
 	},
 	{
 		Name:        "opencode",
 		Command:     []string{"opencode"},
 		Resume:      []string{"opencode", "--continue"},
-		Merge:       []string{"opencode", "run"},
+		Exec:        []string{"opencode", "run"},
 		Description: "OpenCode",
 	},
 	{
 		Name:        "crush",
 		Command:     []string{"crush"},
 		Resume:      []string{"crush", "--continue"},
-		Merge:       []string{"crush", "run"},
+		Exec:        []string{"crush", "run"},
 		Description: "Crush (Charm)",
 	},
 	{
 		Name:        "kimi",
 		Command:     []string{"kimi"},
 		Resume:      []string{"kimi", "--continue"},
-		Merge:       []string{"kimi", "--print", "-p"},
+		Exec:        []string{"kimi", "--print", "-p"},
 		Description: "Kimi CLI (Moonshot)",
 	},
 	{
 		Name:        "qwen",
 		Command:     []string{"qwen"},
 		Resume:      []string{"qwen", "--continue"},
-		Merge:       []string{"qwen", "-p"},
+		Exec:        []string{"qwen", "-p"},
 		Description: "Qwen Code",
 	},
 	{
 		Name:        "copilot",
 		Command:     []string{"copilot"},
 		Resume:      []string{"copilot", "--continue"},
-		Merge:       []string{"copilot", "-p"},
+		Exec:        []string{"copilot", "-p"},
 		Description: "GitHub Copilot CLI",
 	},
 	{
 		Name:        "goose",
 		Command:     []string{"goose"},
 		Resume:      []string{"goose", "session", "--resume"},
-		Merge:       []string{"goose", "run", "-t"},
+		Exec:        []string{"goose", "run", "-t"},
 		Description: "Goose (Block)",
 	},
 }

@@ -21,7 +21,7 @@ type Options struct {
 	WorktreePath string
 	Term         string // "" = default launch method
 	Resume       bool   // use resume command
-	Prompt       string // non-empty: merge command with prompt appended
+	Prompt       string // non-empty: exec command with prompt appended
 }
 
 // CommandString joins argv into a safely quoted shell command line.
@@ -88,7 +88,7 @@ func AITool(opts Options) error {
 	autoResume := config.AutoResume(cfg)
 	switch {
 	case opts.Prompt != "":
-		argv = aitool.MergeCommand(cfg, opts.Prompt)
+		argv = aitool.ExecCommand(cfg, opts.Prompt)
 	case opts.Resume && autoResume:
 		argv = aitool.ResumeCommand(cfg)
 	default:
@@ -111,8 +111,8 @@ func AITool(opts Options) error {
 	}
 
 	cmd := CommandString(argv)
-	// merge_stdin: feed the prompt via a pipe instead of argv.
-	if opts.Prompt != "" && aitool.MergeUsesStdin(cfg) {
+	// exec_stdin: feed the prompt via a pipe instead of argv.
+	if opts.Prompt != "" && aitool.ExecUsesStdin(cfg) {
 		cmd = "printf '%s' " + shellQuote(opts.Prompt) + " | " + cmd
 	}
 	return dispatch(spec, opts.WorktreePath, withEnvOverrides(cmd), toolName, cfg)
@@ -125,7 +125,7 @@ func AITool(opts Options) error {
 // whole chain (e.g. `wt done --ai` re-launching the tool) consistent.
 var passthroughEnv = []string{
 	"WT_AI_TOOL",
-	"WT_AI_TOOL_MERGE",
+	"WT_AI_TOOL_EXEC",
 	"WT_AI_TOOL_RESUME",
 	"WT_LAUNCH_METHOD",
 	"WT_AUTO_RESUME",
