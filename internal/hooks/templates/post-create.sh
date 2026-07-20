@@ -28,18 +28,135 @@ has_js_deps() {
 }
 
 install_js() {
-  cd "$1"
+  # Absolute path: the marker walks below ascend parent dirs, and the
+  # whole body runs in a subshell so its `cd` can't move the caller's cwd
+  # (relative paths would break the walks and skip every other package).
+  pkg_dir=$(cd "$1" && pwd)
+  (cd "$pkg_dir" && _install_js_body "$pkg_dir")
+  # The body reports the workspace root it installed via a
+  # WT_JS_WS_ROOT: line on stderr (kept off stdout so captured output
+  # stays clean); scan_projects records it so member packages of an
+  # already-installed workspace can be skipped.
+}
+
+_install_js_body() {
+  pkg_dir="$1"
   if ! has_js_deps; then
     echo "⏭️   [js] package.json has no dependencies; skipping install"
     return 0
   fi
-  if [ -f "pnpm-lock.yaml" ] && command -v pnpm >/dev/null 2>&1; then
-    echo "📦  [js] pnpm install --frozen-lockfile (pnpm-lock.yaml found)"
-    pnpm install --frozen-lockfile || {
-      echo "⚠️  [js] pnpm-lock.yaml out of sync with package.json; falling back to pnpm install"
+  # Detect the package manager for THIS package. Correctness matters more
+  # than speed here: pnpm and npm lay out node_modules completely
+  # differently (symlink farm vs. flat tree), so running the wrong one
+  # either errors out or silently produces a broken tree.
+  #
+  # Detection walks up from the package dir, nearest marker wins, with two
+  # marker classes:
+  #   - workspace markers: pnpm-workspace.yaml is authoritative for the
+  #     whole tree below it; the packageManager field only counts in the
+  #     package's own package.json (members of a pnpm workspace do NOT
+  #     inherit it from the root — pnpm does not enforce it there, and
+  #     inheriting it would mis-tag member packages that carry their own
+  #     lockfile for a different PM)
+  #   - lockfiles: authoritative for their own directory tree
+  pm=""
+  root_marker=""
+  root_dir=""
+  if command -v node >/dev/null 2>&1; then
+    root_marker=$(node -e 'try{const m=require(process.argv[1]).packageManager||"";console.log(m.split("@")[0])}catch(e){}' "$pkg_dir/package.json" 2>/dev/null)
+    [ -n "$root_marker" ] && root_dir="$pkg_dir"
+  fi
+  dir="$pkg_dir"
+  while [ "$dir" != "/" ]; do
+    if [ -f "$dir/pnpm-workspace.yaml" ]; then root_marker="pnpm"; root_dir="$dir"; break; fi
+    dir=$(dirname "$dir")
+  done
+  lock_dir=""
+  dir="$pkg_dir"
+  while [ "$dir" != "/" ]; do
+    if [ -f "$dir/pnpm-lock.yaml" ]; then pm="pnpm"; lock_dir="$dir"; break; fi
+    if [ -f "$dir/yarn.lock" ]; then pm="yarn"; lock_dir="$dir"; break; fi
+    if [ -f "$dir/bun.lockb" ] || [ -f "$dir/bun.lock" ]; then pm="bun"; lock_dir="$dir"; break; fi
+    if [ -f "$dir/package-lock.json" ] || [ -f "$dir/npm-shrinkwrap.json" ]; then pm="npm"; lock_dir="$dir"; break; fi
+    dir=$(dirname "$dir")
+  done
+  # Member of a pnpm workspace whose own lockfile points at a DIFFERENT
+  # PM? That's contradictory input: running the other PM would build a
+  # foreign node_modules layout inside the workspace. Refuse, loudly.
+  if [ -n "$root_dir" ] && [ "$root_dir" != "$pkg_dir" ] && [ "$root_marker" = "pnpm" ] \
+     && [ "$pm" != "pnpm" ] && [ -n "$pm" ]; then
+    case "$lock_dir" in
+      "$root_dir"/*|"$root_dir")
+        echo "⚠️  [js] $pkg_dir is inside a pnpm workspace ($root_dir) but has its own lockfile in $lock_dir — skipping; remove the stray lockfile or move the package out of the workspace"
+        return 0
+        ;;
+    esac
+  fi
+  # A non-pnpm workspace marker beats a cross-PM lockfile found below or
+  # at the workspace root, but a lockfile strictly above the marker
+  # belongs to an outer project that wraps this one — leave it alone.
+  if [ -n "$root_dir" ] && [ "$root_dir" != "$pkg_dir" ] && [ "$root_marker" != "$pm" ]; then
+    case "$lock_dir" in
+      "$root_dir"/*|"$root_dir"|"") pm="$root_marker" ;;
+    esac
+  fi
+  if [ -z "$pm" ]; then
+    pm="$root_marker"
+  fi
+  # Inside a pnpm workspace the PM is pnpm even for packages that declare
+  # no dependencies (has_js_deps may have skipped them already; be safe) —
+  # covered by the workspace install and reported via the sentinel.
+  if [ -z "$pm" ] && [ -n "$root_dir" ] && [ -f "$root_dir/pnpm-workspace.yaml" ]; then
+    pm="pnpm"
+  fi
+
+  case "$pm" in
+  pnpm)
+    if ! command -v pnpm >/dev/null 2>&1; then
+      echo "⚠️  [js] pnpm project but pnpm not installed; skipping (NOT falling back to npm — it would produce a broken node_modules)"
+      return 0
+    fi
+    # pnpm keeps a single global content-addressed store and hard-links
+    # from it into node_modules. Every worktree's install against the
+    # same store is mostly link-creation — dramatically faster than
+    # npm ci's fresh extract of every tarball.
+    # If this package sits inside a pnpm workspace, run the install at
+    # the workspace root: pnpm install covers all member projects in one
+    # run (recursive-install defaults to true), and reporting the root
+    # back lets the caller skip the members entirely.
+    ws_dir=""
+    if [ -n "$root_dir" ] && [ -f "$root_dir/pnpm-workspace.yaml" ]; then
+      ws_dir="$root_dir"
+    elif [ -n "$lock_dir" ] && [ "$lock_dir" != "$pkg_dir" ]; then
+      ws_dir="$lock_dir"
+    fi
+    if [ -n "$ws_dir" ]; then
+      if [ "$pkg_dir" = "$ws_dir" ]; then
+        echo "📦  [js] pnpm install --frozen-lockfile (workspace root)"
+      else
+        echo "📦  [js] pnpm install --frozen-lockfile (workspace root $ws_dir; covers $pkg_dir)"
+      fi
+      (cd "$ws_dir" && pnpm install --frozen-lockfile) || {
+        echo "⚠️  [js] pnpm-lock.yaml out of sync with package.json; falling back to pnpm install"
+        (cd "$ws_dir" && pnpm install)
+      }
+      echo "WT_JS_WS_ROOT:$ws_dir" >&2
+    elif [ -f "pnpm-lock.yaml" ]; then
+      echo "📦  [js] pnpm install --frozen-lockfile (pnpm-lock.yaml found)"
+      pnpm install --frozen-lockfile || {
+        echo "⚠️  [js] pnpm-lock.yaml out of sync with package.json; falling back to pnpm install"
+        pnpm install
+      }
+    else
+      echo "📦  [js] pnpm install (no lockfile)"
       pnpm install
-    }
-  elif [ -f "yarn.lock" ] && command -v yarn >/dev/null 2>&1; then
+    fi
+    ;;
+  yarn)
+    if ! command -v yarn >/dev/null 2>&1; then
+      echo "⚠️  [js] yarn project but yarn not installed; skipping"
+      return 0
+    fi
     # Yarn 2+ (Berry) uses --immutable; Yarn 1 uses --frozen-lockfile.
     if [ -f ".yarnrc.yml" ]; then
       echo "📦  [js] yarn install --immutable (yarn.lock + .yarnrc.yml found)"
@@ -54,29 +171,60 @@ install_js() {
         yarn install
       }
     fi
-  elif [ -f "bun.lockb" ] && command -v bun >/dev/null 2>&1; then
+    ;;
+  bun)
+    if ! command -v bun >/dev/null 2>&1; then
+      echo "⚠️  [js] bun project but bun not installed; skipping"
+      return 0
+    fi
     echo "📦  [js] bun install --frozen-lockfile (bun.lockb found)"
     bun install --frozen-lockfile || {
       echo "⚠️  [js] bun.lockb out of sync with package.json; falling back to bun install"
       bun install
     }
-  elif [ -f "package-lock.json" ] && command -v npm >/dev/null 2>&1; then
-    echo "📦  [js] npm ci (package-lock.json found)"
-    npm ci
-  elif command -v pnpm >/dev/null 2>&1; then
-    echo "📦  [js] pnpm install (no lockfile)"
-    pnpm install
-  elif command -v npm >/dev/null 2>&1; then
-    echo "📦  [js] npm install (no lockfile)"
-    npm install
-  else
-    echo "⚠️  [js] package.json found but no pnpm/yarn/bun/npm available"
-  fi
+    ;;
+  npm)
+    if ! command -v npm >/dev/null 2>&1; then
+      echo "⚠️  [js] npm project but npm not installed; skipping"
+      return 0
+    fi
+    # npm has no shared store; every worktree gets a full node_modules.
+    # npm ci still wins over npm install here: it skips resolution and
+    # extracts straight from the lockfile + user cache. --prefer-offline
+    # leans on the cache harder without failing on misses.
+    if [ -n "$lock_dir" ]; then
+      # Run npm ci where the lockfile lives (usually this dir, but an
+      # inherited lockfile from a parent dir must run there).
+      echo "📦  [js] npm ci --prefer-offline --no-audit --no-fund ($lock_dir/package-lock.json)"
+      (cd "$lock_dir" && npm ci --prefer-offline --no-audit --no-fund)
+    else
+      echo "📦  [js] npm install (no lockfile)"
+      npm install
+    fi
+    ;;
+  *)
+    # No lockfile anywhere and no packageManager field: unknown project.
+    # Prefer pnpm if available (its global store makes it the fastest and
+    # its lockfile is cheap to generate), else npm.
+    if command -v pnpm >/dev/null 2>&1; then
+      echo "📦  [js] pnpm install (no lockfile, defaulting to pnpm)"
+      pnpm install
+    elif command -v npm >/dev/null 2>&1; then
+      echo "📦  [js] npm install (no lockfile)"
+      npm install
+    else
+      echo "⚠️  [js] package.json found but no pnpm/yarn/bun/npm available"
+    fi
+    ;;
+  esac
 }
 
 # Python environments by lockfile / manifest priority.
 install_python() {
-  cd "$1"
+  (cd "$1" && _install_python_body)
+}
+
+_install_python_body() {
   if [ -f "poetry.lock" ] && command -v poetry >/dev/null 2>&1; then
     # poetry install is strict when poetry.lock exists; it never updates it.
     echo "🐍  [py] poetry install (poetry.lock found)"
@@ -111,22 +259,50 @@ install_python() {
 # Recursively scan the worktree for project roots (node_modules excluded).
 scan_projects() {
   search_root="$1"
+  # Workspace roots already installed by a member (or the root itself);
+  # space-separated for POSIX sh (no arrays). Guarded below against the
+  # empty value, which would make the prefix match hit everything.
+  js_ws_roots=""
 
-  # Python first so requirements.txt dirs don't shadow more specific tools.
+  # Python first so requirements.txt dirs don't shadow more specific
+  # tools. sort -u: a dir matching several markers (e.g. pyproject.toml +
+  # uv.lock) would otherwise be installed once per marker.
   find "$search_root" -maxdepth 3 \( \
     -name "requirements.txt" -o \
     -name "pyproject.toml" -o \
     -name "Pipfile.lock" -o \
     -name "uv.lock" -o \
     -name "poetry.lock" \
-    \) -print 2>/dev/null | while IFS= read -r marker; do
+    \) -print 2>/dev/null | sort -u | while IFS= read -r marker; do
     install_python "$(dirname "$marker")"
   done
 
-  # JS/Node.
+  # JS/Node. Shallowest first: in a monorepo the workspace root must be
+  # installed before its members, because pnpm install covers the whole
+  # workspace in one run (recursive-install defaults to true). Members
+  # whose workspace root was already installed are skipped — find's
+  # traversal order is arbitrary, so we sort by depth instead of relying
+  # on it.
   find "$search_root" -maxdepth 3 -name "package.json" \
-    -not -path "*/node_modules/*" -print 2>/dev/null | while IFS= read -r marker; do
-    install_js "$(dirname "$marker")"
+    -not -path "*/node_modules/*" -print 2>/dev/null \
+    | awk -F/ '{print NF, $0}' | sort -n | cut -d' ' -f2- \
+    | while IFS= read -r marker; do
+    dir=$(cd "$(dirname "$marker")" && pwd)
+    skip=""
+    for ws in $js_ws_roots; do
+      case "$dir" in
+        "$ws"|"$ws"/*) skip=1; echo "⏭️   [js] covered by workspace install at $ws; skipping ($dir)"; break ;;
+      esac
+    done
+    [ -n "$skip" ] && continue
+    # stderr carries both pnpm's own diagnostics and our sentinel line.
+    # Route it through a temp file: harvest the sentinel, replay the rest.
+    err_file=$(mktemp "${TMPDIR:-/tmp}/wt-hook.XXXXXX")
+    install_js "$dir" 2>"$err_file"
+    ws_root=$(sed -n 's/^WT_JS_WS_ROOT://p' "$err_file" | tail -1)
+    grep -v '^WT_JS_WS_ROOT:' "$err_file" >&2 || true
+    rm -f "$err_file"
+    [ -n "$ws_root" ] && js_ws_roots="$js_ws_roots $ws_root"
   done
 
   # Go. `go mod download` never modifies go.mod/go.sum.
