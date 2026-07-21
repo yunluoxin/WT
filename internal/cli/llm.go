@@ -409,6 +409,46 @@ Examples:
     fish:       wt init fish | source  (add to config.fish)
     powershell: wt init powershell | Out-String | Invoke-Expression
   Example: wt init zsh >> ~/.zshrc`},
+	{"commit", `wt commit [--no-verify] [--amend] [--model <id>] [-T <method>]
+  Hand the current working tree to the configured AI tool so it can run
+  'git add -A' and 'git commit' itself — the AI is the agent, NOT just a
+  message writer. wt then verifies a commit was created; if HEAD did
+  not advance (or for --amend the message did not change), 'wt commit'
+  fails with a hint to commit by hand. There is NO --ai flag: this
+  command IS the AI wrapper. Use 'git commit -m "..."' for literal text.
+  Flags:
+        --no-verify       instruct the AI to pass '--no-verify' to git commit
+        --amend           instruct the AI to amend the previous commit
+                          instead of creating a new one
+        --model <id>      forward '--model <id>' to the AI tool, inserted
+                          immediately before the prompt (claude/codex style
+                          tool argv). Useful for picking a cheaper model
+                          (e.g. haiku) just for commit messages.
+        -T, --term        launch method; one of:
+                          foreground (fg), detach (d),
+                          iterm-window (i-w), iterm-tab (i-t),
+                          iterm-pane-h (i-p-h), iterm-pane-v (i-p-v),
+                          tmux (t), tmux-window (t-w),
+                          tmux-pane-h (t-p-h), tmux-pane-v (t-p-v),
+                          zellij (z), zellij-tab (z-t),
+                          zellij-pane-h (z-p-h), zellij-pane-v (z-p-v),
+                          wezterm-window (w-w), wezterm-tab (w-t),
+                          wezterm-pane-h (w-p-h), wezterm-pane-v (w-p-v)
+                          tmux/zellij accept a session name: -T t:mysession
+  Requires an AI tool capable of running git (Claude Code, Codex CLI,
+  etc.). aider's --message mode is message-only and will not commit — if
+  you see "AI finished but no new commit was created", switch presets.
+  Errors:
+    "no AI tool configured"      — WT_AI_TOOL="" and no ai_tool.command.
+    "AI finished but no new ..." — AI exited but HEAD didn't move; the
+                                  tool probably can't run git.
+    "nothing to commit"          — working tree is clean; exit 0, no AI.
+    detached HEAD                — refused.
+  Examples:
+    wt commit
+    wt commit --model haiku
+    wt commit --amend
+    wt commit --no-verify -T t:mysession`},
 }
 
 func llmCmd() *cobra.Command {

@@ -84,7 +84,7 @@ func NewRootCmd() *cobra.Command {
 		syncCmd(), cleanCmd(), changeBaseCmd(), doctorCmd(), diffCmd(),
 		treeCmd(), statsCmd(), stashCmd(), exportCmd(), importCmd(),
 		backupCmd(), hookCmd(), scanCmd(), pruneCmd(),
-		pathCmd(), cdCmd(), initCmd(), llmCmd(),
+		pathCmd(), cdCmd(), initCmd(), llmCmd(), commitCmd(),
 	)
 	return root
 }

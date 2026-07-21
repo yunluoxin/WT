@@ -20,6 +20,7 @@ var (
 	ErrAborted           = errors.New("operation aborted")
 	ErrAmbiguousTarget   = errors.New("ambiguous target")
 	ErrProtectedWorktree = errors.New("cannot delete main repository worktree")
+	ErrAIUnavailable     = errors.New("AI tool unavailable")
 )
 
 // Error is the base error type carrying a user-facing message.

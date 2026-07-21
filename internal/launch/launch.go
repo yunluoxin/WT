@@ -22,6 +22,7 @@ type Options struct {
 	Term         string // "" = default launch method
 	Resume       bool   // use resume command
 	Prompt       string // non-empty: exec command with prompt appended
+	Model        string // optional: forward as "--model <id>" inserted right before the prompt
 }
 
 // CommandString joins argv into a safely quoted shell command line.
@@ -50,6 +51,23 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+// insertBeforeLast returns argv with items inserted just before its
+// last element. Used to put "--model <id>" right before the appended
+// prompt that applyPrompt adds. When argv is empty, returns just items.
+func insertBeforeLast(argv []string, items ...string) []string {
+	if len(argv) == 0 {
+		out := make([]string, len(items))
+		copy(out, items)
+		return out
+	}
+	last := len(argv) - 1
+	out := make([]string, 0, len(argv)+len(items))
+	out = append(out, argv[:last]...)
+	out = append(out, items...)
+	out = append(out, argv[last])
+	return out
 }
 
 // GenerateSessionName builds a tmux/zellij session name:
@@ -99,6 +117,15 @@ func AITool(opts Options) error {
 		} else {
 			argv = aitool.EffectiveCommand(cfg)
 		}
+	}
+
+	// Inject --model <id> right before the prompt so AI tools that
+	// accept a positional --model flag pick it up. The prompt is the
+	// last element for built-in presets (applyPrompt appends); for
+	// user configs using the {prompt} placeholder the flag lands at
+	// argv-end which most AI tool parsers still tolerate.
+	if opts.Prompt != "" && opts.Model != "" && len(argv) > 0 {
+		argv = insertBeforeLast(argv, "--model", opts.Model)
 	}
 
 	if len(argv) == 0 {

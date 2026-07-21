@@ -304,3 +304,50 @@ func firstArg(args []string) string {
 	}
 	return ""
 }
+
+// commitCmd is the AI-powered git commit. There is no --ai flag because the
+// command itself is the AI wrapper — 'git commit -m "..."' already covers
+// the literal case.
+//
+// The AI tool runs as an agent with git access and is responsible for
+// staging and committing; wt just verifies the result. The --amend and
+// --no-verify flags are passed through as part of the AI instructions.
+func commitCmd() *cobra.Command {
+	var noVerify, amend bool
+	var term, model string
+	cmd := &cobra.Command{
+		Use:   "commit",
+		Short: "Hand the working tree to the AI tool so it can stage and commit",
+		Long: `Hand the current working tree to the configured AI tool so it can
+run 'git add -A' and 'git commit' itself. wt then verifies a commit
+was created. Run from inside any git repository — main or feature
+worktree.
+
+This command is the AI wrapper around 'git commit': there is no '--ai'
+flag, the AI is on by default. For literal commits, use
+'git commit -m "..."' directly. If no AI tool is configured, 'wt commit'
+refuses — configure one with 'wt config use-preset <name>' or by setting
+WT_AI_TOOL.
+
+Because the AI tool runs git itself, --amend and --no-verify are
+forwarded as natural-language instructions to the AI (e.g. "use
+'git commit --amend -m ...'") rather than as raw git arguments.
+Prefer tools that run in agent / exec mode (Claude Code, Codex) —
+aider's --message mode and other pure-message tools will not commit.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ops.CommitChanges(ops.CommitOptions{
+				NoVerify: noVerify,
+				Amend:    amend,
+				Model:    model,
+				Term:     term,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "Tell the AI to pass --no-verify to git commit (skip pre-commit hooks)")
+	cmd.Flags().BoolVar(&amend, "amend", false, "Tell the AI to amend the previous commit instead of creating a new one")
+	cmd.Flags().StringVar(&model, "model", "", "AI model id (forwarded as --model <id> to the AI tool)")
+	cmd.Flags().StringVarP(&term, "term", "T", "", "Launch method (e.g. i-t, t:mysession, z-p-h); default from launch.method config")
+	_ = cmd.RegisterFlagCompletionFunc("term", termFlagCompletion)
+	return cmd
+}
